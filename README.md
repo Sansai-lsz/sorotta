@@ -1,16 +1,22 @@
-# game-bot
+# そろった（game-bot）
 
-ゲームの参加者を募集し、参加できる開始時刻を集める Discord bot。Cloudflare Workers と D1 で動く。
+<img src="assets/icon.png" alt="そろった のアイコン" width="96" align="right">
+
+ゲームの参加者と開始時刻をボタンで集め、人数がそろったらメンバーに知らせる Discord bot。1 つのサーバーに入れて使う前提で作っている。
+
+Cloudflare Workers と D1 で動き、無料枠の範囲で常時稼働する。
 
 ## 使い方
 
 | コマンド | 内容 |
 |---|---|
-| `/game add name:Apex players:3 max:3 role:@Apex勢` | ゲームと最少人数を登録する。`max` は定員で、省略すると定員なし。`role` はこのゲームの募集でメンションするロールで、省略するとメンションしない。登録済みなら上書き |
-| `/game list` | 登録済みのゲームを表示する（自分にだけ見える） |
+| `/募集 game:Apex` | 募集を出す。`時間帯:夜` で時間帯を、`date:11/3` や `date:明日` で日付を、`通知:@Apex勢` でメンションするロールを指定できる |
+| `/game add name:Apex players:3 max:3 role:@Apex勢` | ゲームを登録する。`players` は最少人数、`max` は定員（省略すると定員なし）、`role` はこのゲームの募集でメンションするロール（省略するとメンションしない）。登録済みのゲームなら全項目を上書きする |
+| `/game list` | 登録済みのゲームを表示する（実行した人にだけ見える） |
 | `/game remove name:Apex` | ゲームの登録を消す |
-| `/募集 game:Apex` | 今日の募集を出す。`時間帯:夜` で時間帯を、`date:11/3` や `date:明日` で日付を、`通知:@Apex勢` でメンションするロールを指定できる |
-| `/使い方` | この bot の使い方を表示する（自分にだけ見える） |
+| `/使い方` | この bot の使い方を表示する（実行した人にだけ見える） |
+
+募集できるのは `/game add` で登録したゲームだけ。
 
 ### 時間帯
 
@@ -22,38 +28,52 @@
 | 🌌 深夜 | 翌 0〜5 時 |
 | いつでも | 上の 4 つすべて |
 
-- 時間帯を省略すると、今日の募集なら今の時間帯を選ぶ。今の時間帯に残っている時刻が 3 つ未満なら次の時間帯にする。深夜の残りも 3 つ未満なら翌日の朝の募集になる。今日以外の日付なら夜になる
-- 指定した時間帯の時刻がすべて過ぎていれば、募集は出さずに実行した人にだけ知らせる
-- 0〜5 時は前日の深夜として扱う。この時間に日付を省略したり「今日」と書いたりすると前日の募集になり、「明日」はその翌日になる
-- 募集した人は自動で参加する。時間帯を指定した募集なら最初に残っている時刻から、いつでもの募集なら「いつでもOK」で参加する
+- 時間帯を省略したときは、今日の募集なら今の時間帯を使う。今の時間帯に残っている時刻が 3 つ未満なら次の時間帯にし、深夜の残りも 3 つ未満なら翌日の朝にする。今日以外の日付なら夜にする
+- 指定した時間帯の時刻がすべて過ぎていれば、募集を出さずに、実行した人にだけその旨を返す
+- 0〜5 時は前日の深夜として扱う。この時間帯に日付を省略するか「今日」と書くと前日の募集になり、「明日」はその翌日になる
+- 募集した人は自動で参加する。時間帯を 1 つ指定した募集では最初に残っている時刻から、いつでもの募集では「いつでもOK」で参加する
 
-### 回答
+### 回答のしかた
 
-- 時間帯を 1 つ指定した募集では、時刻のボタンを押すとその時刻から参加する扱いになる。押し直すと上書きされる。過ぎた時刻のボタンは出ない
-- いつでもの募集では、時間帯ごとのメニューで開始時刻を選ぶ。時間帯ごとに別々に回答でき、「朝は無理」などを選ぶとその時間帯の回答を消す。「🙆 いつでもOK」はすべての時間帯・時刻で参加する扱いになり、押すたびにオンとオフが切り替わる
+- 時間帯を 1 つ指定した募集では、時刻のボタンを押すと、その時刻から参加する扱いになる。過ぎた時刻のボタンは出ない
+- いつでもの募集では時間帯ごとのメニューで開始時刻を選ぶ。時間帯ごとに別々に答えられ、「朝は無理」などを選ぶとその時間帯の回答を消す
+- 「🙆 いつでもOK」はすべての時間帯と時刻で参加する扱いになる。押すたびにオンとオフが切り替わる
 - 今がその時間帯の中なら「⚡ 今すぐ」を選べる。今の時刻から参加する扱いになり、一覧に ⚡今すぐ と付く
 - 「今日はパス」を押すと、その人の回答をすべて消してパスにする
+- 時刻を選び直すと、前の回答を上書きする
 
 ### 集計と通知
 
-- 早い時刻から参加できる人は、同じ時間帯の中でそれより後の時刻の人数にも数える。時間帯をまたいでは数えない
+- 早い時刻から参加できる人を、同じ時間帯の中でそれより後の時刻の人数にも数える。時間帯をまたいでは数えない
 - 最少人数がそろった最初の時刻で、そろったメンバーに 1 回だけメンションする
 - 定員を超えたら、先に回答した人から定員までをメンバーにし、残りを補欠として表示する
-- 受付中は過ぎた時刻を数えない。締め切り・中止の後は、通知した時刻に今も最少人数がいればその結果を残し、それ以外は「そろいませんでした」と出す
+- 受付中は過ぎた時刻を数えない。締め切りや中止のあとは、通知した時刻に今も最少人数がいればその結果を残し、いなければ「そろいませんでした」と表示する
 
 ### ロールへのメンション
 
-- 募集を出すとき、`通知` で指定したロールに、なければ `/game add` で登録したロールにメンションする。どちらもなければメンションしない
-- メンションは募集を出したときの 1 回だけ届く
-- bot には全ロールへのメンション権限を付けていないので、メンションするロールはサーバー設定の「ロール」で「このロールに対して@mentionを許可する」をオンにしておく
+- 募集を出すとき、`通知` で指定したロールにメンションする。指定がなければ `/game add` で登録したロールに、どちらもなければメンションしない
+- メンションが届くのは、募集を出したときの 1 回だけ
+- @everyone は指定できない
+- bot には全ロールへのメンション権限を付けていない。そのため、メンションするロールではサーバー設定の「ロール」で「このロールに対して@mentionを許可する」をオンにしておく。オフのロールを指定すると、メンションが届かないことを返信で注意する
 
 ### 締め切りと中止
 
-- 募集の ⚙ を押すと、募集した人にだけ「締め切る」と「中止」が出る。ほかの人が押すと、募集した人だけが操作できると本人にだけ返す
-- 締め切るとボタンが消え、結果だけが残る。bot の権限が足りず投稿を書き換えられなかったときは、そのことを募集した人にだけ知らせる。中止すると、パスした人と募集した人を除いて回答していた人にメンションで知らせる
-- 募集の時間帯の時刻がすべて過ぎると、毎時の定期処理が自動で締め切る
+- 募集の ⚙ を押すと、募集した人にだけ「締め切る」と「中止」が出る。ほかの人が押すと、募集した人だけが操作できることを本人にだけ返す
+- 締め切ると、ボタンが消えて結果だけが残る
+- 中止すると、パスした人と募集した人を除き、回答していた人にメンションで知らせる
+- bot の権限が足りず投稿を書き換えられなかったときは、募集した人にだけそのことを知らせる
+- 時間帯の時刻がすべて過ぎた募集は、毎時の定期処理が自動で締め切る
+
+## 仕組み
+
+- Discord からの操作は Cloudflare Workers に HTTP で届く（Interactions Endpoint）。Discord に常時接続しないので、bot はメンバー一覧で常にオフライン表示になる
+- 募集と回答は D1（SQLite）に保存する
+- 自動の締め切りは Workers の Cron で毎時 0 分に動く
+- 募集の投稿の書き換えと中止の通知には、bot token を使う
 
 ## セットアップ
+
+自分のサーバーで動かすときの手順。コマンドは PowerShell の例。
 
 ### 1. 依存を入れる
 
@@ -63,50 +83,78 @@ npm install
 
 ### 2. Discord のアプリを作る
 
-1. [Discord Developer Portal](https://discord.com/developers/applications) で New Application を押してアプリを作る
+1. [Discord Developer Portal](https://discord.com/developers/applications) で New Application を押し、アプリを作る
 2. General Information で `APPLICATION ID` と `PUBLIC KEY` を控える
-3. Bot タブで Reset Token を押し、token を控える（他人に見せない）
-4. Installation タブで Guild Install だけを有効にし、Default Install Settings の scopes に `applications.commands` と `bot` を入れ、Permissions に `View Channel` と `Send Messages` を入れる（締め切り・中止で投稿を書き換えたり中止を知らせたりするのに使う）
-5. 同じ画面の Install Link をブラウザで開き、対象のサーバーに追加する
-6. Discord の設定 → 詳細設定 → 開発者モードを ON にし、サーバー名を右クリック →「サーバー ID をコピー」で ID を控える
+3. Bot タブで Reset Token を押し、token を控える。token は他人に見せない
+4. Installation タブで、Installation Contexts の Guild Install だけを有効にする。Default Install Settings の Scopes に `applications.commands` と `bot` を、Permissions に `View Channel` と `Send Messages` を入れる
+5. Install Link をブラウザで開き、サーバーに追加する（サーバー管理の権限が必要）
+6. Discord の設定 → 詳細設定で開発者モードをオンにし、サーバー名を右クリック →「サーバー ID をコピー」で ID を控える
 
-### 3. Cloudflare にデプロイする
+### 3. 設定を書き換える
 
 ```powershell
 npx wrangler login
 npx wrangler d1 create game-bot
 ```
 
-表示された `database_id` と、手順 2 の `APPLICATION ID`・`PUBLIC KEY` を `wrangler.jsonc` の `REPLACE_WITH_...` に書き込む。
+`wrangler.jsonc` の次の値を、自分のものに書き換える。
 
-bot token を Worker の secret に登録する。
+| キー | 値 |
+|---|---|
+| `d1_databases[0].database_id` | `wrangler d1 create` が表示した ID |
+| `vars.DISCORD_APP_ID` | 手順 2 の `APPLICATION ID` |
+| `vars.DISCORD_PUBLIC_KEY` | 手順 2 の `PUBLIC KEY` |
 
-```powershell
-npx wrangler secret put DISCORD_BOT_TOKEN
-```
-
-```powershell
-npm run migrate
-npm run deploy
-```
-
-募集を自動で締め切る毎時の定期処理（Cron）は `wrangler.jsonc` の `triggers` に書いてあり、デプロイすると有効になる。
-
-デプロイ後に表示される `https://game-bot.<アカウント名>.workers.dev` を、Developer Portal の General Information → Interactions Endpoint URL に貼って保存する。保存時に Discord が署名の検証を試すので、ここで保存できればつながっている。
-
-### 4. コマンドを登録する
+コマンドの登録に使う値を `.dev.vars` に書く。`.dev.vars` は git の管理対象外。
 
 ```powershell
 Copy-Item .dev.vars.example .dev.vars
+notepad .dev.vars
 ```
 
-`.dev.vars` に Application ID、サーバー ID、bot token を書き、登録する。
+| キー | 値 |
+|---|---|
+| `DISCORD_APP_ID` | 手順 2 の `APPLICATION ID` |
+| `DISCORD_GUILD_ID` | 手順 2 のサーバー ID |
+| `DISCORD_BOT_TOKEN` | 手順 2 の token |
+
+### 4. デプロイする
+
+先にデータベースを作る。
+
+```powershell
+npm run migrate
+```
+
+`wrangler.jsonc` で bot token を必須の secret にしているので、初回のデプロイでは token を一緒に渡す。まだない Worker には `wrangler secret put` で secret を登録できないため、token だけを書いた一時ファイルを使う。
+
+```powershell
+Select-String -Path .dev.vars -Pattern '^DISCORD_BOT_TOKEN=' | ForEach-Object { $_.Line } | Set-Content -Path secrets.tmp
+npx wrangler deploy --secrets-file secrets.tmp
+Remove-Item secrets.tmp
+```
+
+2 回目からは `npm run deploy` だけでよい。token を変えたときは `npx wrangler secret put DISCORD_BOT_TOKEN` で登録し直す。
+
+デプロイすると `https://game-bot.<サブドメイン>.workers.dev` が表示される。この URL を Developer Portal の General Information → Interactions Endpoint URL に貼って保存する。保存するときに Discord が署名を検証するので、保存できればつながっている。
+
+### 5. コマンドを登録する
 
 ```powershell
 npm run register
 ```
 
-コマンドを変えたときも `npm run register` を再実行する。
+コマンドは `.dev.vars` の `DISCORD_GUILD_ID` のサーバーにだけ登録する（ギルドコマンド）。コマンドやオプションを変えたときは、もう一度実行する。
+
+### 更新するとき
+
+`migrations/` に新しいファイルが増えたときは、デプロイより先に `npm run migrate` を実行する。新しいコードがまだない列を読んで失敗するのを防ぐため。
+
+```powershell
+npm run migrate
+npm run deploy
+npm run register
+```
 
 ## 開発
 
@@ -115,6 +163,10 @@ npm run typecheck
 npm test
 ```
 
-`npm run dev` には workerd が必要。npm の設定で install script が止められている場合は、`npm install-scripts approve workerd` と `npm rebuild workerd` を先に実行する。
+- `npm run dev` には workerd が必要。npm の設定で install script が止められているときは、先に `npm install-scripts approve workerd` と `npm rebuild workerd` を実行する
+- `wrangler.jsonc` を変えたら、`npm run types` で `worker-configuration.d.ts` を作り直す
+- 画面の動きを確かめるためのモックが `docs/mock.html` にある
 
-`wrangler.jsonc` を変えたら `npm run types` で `worker-configuration.d.ts` を作り直す。
+## ライセンス
+
+[MIT](LICENSE)
