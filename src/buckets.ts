@@ -12,7 +12,6 @@ export type Bucket = (typeof BUCKETS)[number];
 export type BucketKey = Bucket["key"];
 export type Scope = BucketKey | "any";
 
-// 自動で選んだ時間帯に残り時刻がこれ未満なら、次の時間帯を選ぶ
 const MIN_OPEN_HOURS_FOR_AUTO = 3;
 
 export function isBucketKey(s: string): s is BucketKey {
@@ -45,7 +44,6 @@ export function openHours(bucket: Bucket, clock: number): number[] {
   return bucket.hours.filter((h) => !isHourOver(h, clock));
 }
 
-/** 今がこの時間帯の中ならその時刻（⚡今すぐで登録する時刻） */
 export function nowHourIn(bucket: Bucket, clock: number): number | null {
   const hour = Math.floor(clock);
   return hasHour(bucket, hour) ? hour : null;
@@ -55,7 +53,6 @@ export function isScopeOver(scope: Scope, clock: number): boolean {
   return bucketsOf(scope).every((b) => b.hours.every((h) => isHourOver(h, clock)));
 }
 
-/** 「21時〜」。深夜は「0時〜（11/2）」と翌日の日付を付ける */
 export function hourLabel(hour: number, date: string): string {
   return hour >= 24 ? `${shortHourLabel(hour)}（${formatMonthDay(addDays(date, 1))}）` : shortHourLabel(hour);
 }

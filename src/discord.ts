@@ -15,7 +15,6 @@ export function respond(body: APIInteractionResponse): Response {
   return Response.json(body);
 }
 
-/** 押した人にだけ見えるメッセージ。メンションしても通知は飛ばさない */
 export function ephemeralMessage(content: string): APIInteractionResponseCallbackData {
   return { content, flags: MessageFlags.Ephemeral, allowed_mentions: { parse: [] } };
 }
@@ -52,7 +51,7 @@ export function followUp(appId: string, token: string, body: APIInteractionRespo
   return callApi("POST", `/webhooks/${appId}/${token}`, body);
 }
 
-/** 応答した投稿の ID。応答直後はまだ作られておらず 404 になりうるので、待ってから数回試す */
+// 応答直後は投稿がまだ作られておらず 404 になりうるので、待ってから数回試す
 export async function getOriginalMessageId(appId: string, token: string): Promise<string | null> {
   const path = `/webhooks/${appId}/${token}/messages/@original`;
   for (let attempt = 0; attempt < ORIGINAL_MESSAGE_ATTEMPTS; attempt++) {

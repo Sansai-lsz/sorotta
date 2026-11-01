@@ -35,7 +35,6 @@ function slotNow(bucket: BucketKey, clock: number): AnswerResult {
   return { ok: true, op: { kind: "slot", bucket, hour, now: true } };
 }
 
-/** 押されたボタンや選ばれた値を、今の時刻で検証して DB に書く操作に変える */
 export function resolveAnswer(action: AnswerAction, rec: { scope: Scope }, clock: number): AnswerResult {
   switch (action.kind) {
     case "hour":

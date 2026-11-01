@@ -24,7 +24,7 @@ CREATE TABLE participants (
   UNIQUE (recruitment_id, user_id)
 );
 
--- 時間帯ごとに開始時刻を 1 つ持つ。深夜の hour は 24〜29
+-- 深夜の hour は 24〜29
 CREATE TABLE slots (
   recruitment_id TEXT NOT NULL,
   user_id TEXT NOT NULL,

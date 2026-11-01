@@ -14,12 +14,10 @@ function isoDateMs(isoDate: string): number {
   return Date.parse(`${isoDate}T00:00:00Z`);
 }
 
-/** JST の 6:00 から翌 5:59 までを 1 日とみなした今日の日付（YYYY-MM-DD） */
 export function gameToday(now: Date): string {
   return toIsoDate(now.getTime() + JST_OFFSET_MS - GAME_DAY_START_HOUR * HOUR_MS);
 }
 
-/** 募集日 isoDate の JST 0:00 から now までの経過時間（時間単位）。翌 1:00 は 25 */
 export function clockOf(isoDate: string, now: Date): number {
   return (now.getTime() - (isoDateMs(isoDate) - JST_OFFSET_MS)) / HOUR_MS;
 }
@@ -56,7 +54,6 @@ export function formatDate(isoDate: string): string {
   return `${d.getUTCMonth() + 1}/${d.getUTCDate()}(${WEEKDAYS[d.getUTCDay()]})`;
 }
 
-/** YYYY-MM-DD を「11/3」にする */
 export function formatMonthDay(isoDate: string): string {
   const d = new Date(isoDateMs(isoDate));
   return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`;

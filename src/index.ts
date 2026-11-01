@@ -113,7 +113,6 @@ async function handleGameCommand(
   }
 }
 
-/** 募集した本人は、いつでもなら「いつでもOK」、時間帯なら最初に残っている時刻で参加する */
 function hostJoin(scope: Scope, date: string, now: Date): { op: AnswerOp; participant: Omit<Participant, "userId"> } | null {
   if (scope === "any") {
     return { op: { kind: "toggleAnytime" }, participant: { passed: false, anytime: true, slots: {} } };

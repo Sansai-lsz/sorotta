@@ -56,7 +56,6 @@ export function tallyRecruitment(rec: Recruitment, participants: Participant[], 
   return tally({ scope: rec.scope, participants, min: rec.min, max: rec.max, clock });
 }
 
-/** 中止を知らせる相手。パスした人と募集した本人には送らない */
 export function cancelNoticeTargets(rec: { hostId: string }, participants: Participant[]): string[] {
   return participants
     .filter((p) => !p.passed && p.userId !== rec.hostId && (p.anytime || Object.keys(p.slots).length > 0))

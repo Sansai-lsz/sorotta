@@ -102,7 +102,6 @@ function answerStatements(db: D1Database, recruitmentId: string, userId: string,
   }
 }
 
-/** 募集の作成と募集した本人の参加を 1 回の batch で書く */
 export async function createRecruitment(db: D1Database, rec: Recruitment, hostJoin: AnswerOp): Promise<void> {
   await db.batch([
     db
@@ -122,7 +121,6 @@ export async function getRecruitment(db: D1Database, id: string): Promise<Recrui
   return row ? parseRecruitment(row) : null;
 }
 
-/** date 以前の受付中の募集。Cron が時間帯の終わった募集を締め切るのに使う */
 export async function listOpenRecruitmentsUntil(db: D1Database, date: string): Promise<Recruitment[]> {
   const { results } = await db
     .prepare(`SELECT ${RECRUITMENT_COLUMNS} FROM recruitments WHERE status = 'open' AND date <= ?`)
@@ -179,7 +177,6 @@ export async function markNotified(db: D1Database, recruitmentId: string): Promi
   return result.meta.changes === 1;
 }
 
-/** 受付中の募集を終える。⚙ と自動締め切りが重なっても true を返すのは 1 回だけ */
 export async function finishRecruitment(db: D1Database, id: string, status: "closed" | "cancelled"): Promise<boolean> {
   const result = await db
     .prepare("UPDATE recruitments SET status = ? WHERE id = ? AND status = 'open'")

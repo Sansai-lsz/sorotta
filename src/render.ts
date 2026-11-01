@@ -42,7 +42,6 @@ export function playersLabel(min: number, max: number | null): string {
   return max === null ? `${min}人〜` : `${min}人〜・定員${max}人`;
 }
 
-/** /game の返事・一覧・自動補完で使う「Apex（3人〜・定員3人）」 */
 export function gameLabel(game: { name: string; min: number; max: number | null }): string {
   return `${game.name}（${playersLabel(game.min, game.max)}）`;
 }
