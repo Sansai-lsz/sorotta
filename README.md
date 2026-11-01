@@ -1,4 +1,4 @@
-# そろった（game-bot）
+# そろった（sorotta）
 
 <img src="assets/icon.png" alt="そろった のアイコン" width="96" align="right">
 
@@ -136,7 +136,7 @@ Remove-Item secrets.tmp
 
 2 回目からは `npm run deploy` だけでよい。token を変えたときは `npx wrangler secret put DISCORD_BOT_TOKEN` で登録し直す。
 
-デプロイすると `https://game-bot.<サブドメイン>.workers.dev` が表示される。この URL を Developer Portal の General Information → Interactions Endpoint URL に貼って保存する。保存するときに Discord が署名を検証するので、保存できればつながっている。
+デプロイすると `https://sorotta.<サブドメイン>.workers.dev` が表示される。この URL を Developer Portal の General Information → Interactions Endpoint URL に貼って保存する。保存するときに Discord が署名を検証するので、保存できればつながっている。
 
 ### 5. コマンドを登録する
 
