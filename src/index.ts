@@ -53,6 +53,7 @@ import {
   renderReadyNotice,
   withRoleMention,
 } from "./render.ts";
+import { checkNotifyRole, chooseNotifyRole, type RoleCheck } from "./notifyRole.ts";
 import { cancelNoticeTargets, tallyRecruitment, type Participant } from "./tally.ts";
 import { usageResponse } from "./usage.ts";
 import { verifySignature } from "./verify.ts";
@@ -130,6 +131,15 @@ function roleSuffix(roleId: string | null): string {
   return roleId === null ? "" : `（通知: <@&${roleId}>）`;
 }
 
+function roleCheckOf(
+  interaction: APIChatInputApplicationCommandInteraction,
+  roleId: string | undefined,
+  guildId: string,
+): RoleCheck {
+  if (roleId === undefined) return { ok: true, warning: null };
+  return checkNotifyRole(roleId, guildId, interaction.data.resolved?.roles?.[roleId]?.mentionable);
+}
+
 async function handleGameCommand(
   interaction: APIChatInputApplicationCommandInteraction,
   env: Env,
@@ -141,12 +151,16 @@ async function handleGameCommand(
       const name = stringOption(sub.options, "name")?.trim();
       const min = integerOption(sub.options, "players");
       const max = integerOption(sub.options, "max") ?? null;
-      const notifyRoleId = roleOption(sub.options, "role") ?? null;
+      const roleInput = roleOption(sub.options, "role");
       if (!name || min === undefined) return reply("ゲーム名と人数を指定してください", { ephemeral: true });
       if (max !== null && max < min) return reply("定員は最少人数以上にしてください", { ephemeral: true });
+      const roleCheck = roleCheckOf(interaction, roleInput, guildId);
+      if (!roleCheck.ok) return reply(roleCheck.message, { ephemeral: true });
+      const notifyRoleId = roleInput ?? null;
       const game = { name, min, max, notifyRoleId };
       await upsertGame(env.DB, guildId, game);
-      return reply(`${gameLabel(game)}を登録しました${roleSuffix(notifyRoleId)}`);
+      const warning = roleCheck.warning === null ? "" : `\n⚠️ ${roleCheck.warning}`;
+      return reply(`${gameLabel(game)}を登録しました${roleSuffix(notifyRoleId)}${warning}`);
     }
     case "list": {
       const games = await listGames(env.DB, guildId);
@@ -196,6 +210,9 @@ async function handleRecruitCommand(
   }
   const hostId = userIdOf(interaction);
   if (!hostId) return reply("ユーザーを特定できませんでした", { ephemeral: true });
+  const roleInput = roleOption(options, NOTIFY_OPTION);
+  const roleCheck = roleCheckOf(interaction, roleInput, guildId);
+  if (!roleCheck.ok) return reply(roleCheck.message, { ephemeral: true });
 
   const rec: Recruitment = {
     id: interaction.id,
@@ -222,10 +239,13 @@ async function handleRecruitCommand(
     (async () => {
       const messageId = await getOriginalMessageId(env.DISCORD_APP_ID, interaction.token);
       if (messageId) await saveMessageId(env.DB, rec.id, messageId);
+      if (roleCheck.warning !== null) {
+        await followUp(env.DISCORD_APP_ID, interaction.token, ephemeralMessage(roleCheck.warning));
+      }
       await notifyIfReady(env, interaction.token, snapshot.rec, snapshot.participants, now);
     })(),
   );
-  const notifyRoleId = roleOption(options, NOTIFY_OPTION) ?? game.notifyRoleId;
+  const notifyRoleId = chooseNotifyRole(roleInput, game.notifyRoleId);
   return respond({
     type: InteractionResponseType.ChannelMessageWithSource,
     data: withRoleMention(renderBoard(snapshot.rec, snapshot.participants, now), game.name, notifyRoleId),

@@ -241,6 +241,10 @@ describe("renderBoard のメンション", () => {
   it("一覧のメンションでは誰にも通知しない", () => {
     expect(renderBoard(base, [], jst("2026-11-01T17:00:00")).allowed_mentions).toEqual({ parse: [] });
   });
+
+  it("本文を持たないので、書き換えても最初のロールのメンションが残り、通知し直さない", () => {
+    expect(renderBoard(base, [], jst("2026-11-01T17:00:00")).content).toBeUndefined();
+  });
 });
 
 describe("withRoleMention", () => {

@@ -251,3 +251,15 @@ describe("migration 0002", () => {
     expect(sqlite.prepare("SELECT name FROM sqlite_master WHERE name = 'entries'").all()).toEqual([]);
   });
 });
+
+describe("migration 0003", () => {
+  it("前から登録してあるゲームはロールなしで読める", async () => {
+    const sqlite = new DatabaseSync(":memory:");
+    sqlite.exec(migration("0001_init.sql"));
+    sqlite.exec(migration("0002_time_buckets.sql"));
+    sqlite.exec("INSERT INTO games (guild_id, name, required, max_players) VALUES ('g', 'Apex', 3, 3);");
+    sqlite.exec(migration("0003_notify_role.sql"));
+
+    expect(await findGame(asD1(sqlite), "g", "Apex")).toEqual({ name: "Apex", min: 3, max: 3, notifyRoleId: null });
+  });
+});

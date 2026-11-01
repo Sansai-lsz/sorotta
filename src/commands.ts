@@ -14,7 +14,7 @@ export const commands: RESTPutAPIApplicationGuildCommandsJSONBody = [
       {
         type: ApplicationCommandOptionType.Subcommand,
         name: "add",
-        description: "ゲームを登録する（登録済みなら人数を上書き）",
+        description: "ゲームを登録する（登録済みなら人数・定員・ロールを上書き）",
         options: [
           {
             type: ApplicationCommandOptionType.String,

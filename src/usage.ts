@@ -1,4 +1,4 @@
-import { GAME_COMMAND, RECRUIT_COMMAND, USAGE_COMMAND } from "./commands.ts";
+import { GAME_COMMAND, NOTIFY_OPTION, RECRUIT_COMMAND, USAGE_COMMAND } from "./commands.ts";
 import { reply } from "./discord.ts";
 
 export const USAGE_TEXT = `🎮 **ゲーム募集bot「そろった」の使い方**
@@ -10,6 +10,7 @@ export const USAGE_TEXT = `🎮 **ゲーム募集bot「そろった」の使い�
 ・時間帯を選ぶ（朝・昼・夜・深夜）→ その時間帯の時刻ボタンが出ます
 ・「いつでも」を選ぶ → 時間帯ごとに「何時から？」を選べる募集になります
 ・日付も指定できます（例: \`明日\`、\`11/3\`）。省略すると今日
+・\`${NOTIFY_OPTION}:@ロール\` でロールにメンションできます（省略するとゲームに登録したロール）
 ・募集した人は自動で参加扱いになります
 
 **▶ 参加する人**
@@ -30,7 +31,7 @@ export const USAGE_TEXT = `🎮 **ゲーム募集bot「そろった」の使い�
 
 **▶ ゲームの登録**
 募集できるのは登録済みのゲームだけです。
-\`/${GAME_COMMAND} add name:ゲーム名 players:最少人数 max:定員\`（定員は省略可）
+\`/${GAME_COMMAND} add name:ゲーム名 players:最少人数 max:定員 role:@ロール\`（定員とロールは省略可。ロールは募集のたびにメンションされます）
 登録済みの一覧は \`/${GAME_COMMAND} list\`。
 
 この説明は \`/${USAGE_COMMAND}\` でいつでも見られます。`;
