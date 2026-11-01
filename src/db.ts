@@ -122,6 +122,15 @@ export async function getRecruitment(db: D1Database, id: string): Promise<Recrui
   return row ? parseRecruitment(row) : null;
 }
 
+/** date 以前の受付中の募集。Cron が時間帯の終わった募集を締め切るのに使う */
+export async function listOpenRecruitmentsUntil(db: D1Database, date: string): Promise<Recruitment[]> {
+  const { results } = await db
+    .prepare(`SELECT ${RECRUITMENT_COLUMNS} FROM recruitments WHERE status = 'open' AND date <= ?`)
+    .bind(date)
+    .all<RecruitmentRow>();
+  return results.map(parseRecruitment);
+}
+
 export async function saveMessageId(db: D1Database, id: string, messageId: string): Promise<void> {
   await db
     .prepare("UPDATE recruitments SET message_id = ? WHERE id = ? AND message_id IS NULL")

@@ -12,10 +12,10 @@ import {
   type APIMessageComponentInteraction,
 } from "discord-api-types/v10";
 import { resolveAnswer, type AnswerAction, type AnswerOp } from "./answer.ts";
-import { bucketOf, isScope, openHours, planRecruitment, type Scope } from "./buckets.ts";
+import { bucketOf, isScope, isScopeOver, openHours, planRecruitment, type Scope } from "./buckets.ts";
 import { GAME_COMMAND, RECRUIT_COMMAND, SCOPE_OPTION } from "./commands.ts";
 import { parseCustomId, parseSelectValue, type ComponentAction } from "./customId.ts";
-import { clockOf, parseDateInput } from "./date.ts";
+import { clockOf, gameToday, parseDateInput } from "./date.ts";
 import {
   applyAnswer,
   createRecruitment,
@@ -24,6 +24,7 @@ import {
   finishRecruitment,
   getRecruitment,
   listGames,
+  listOpenRecruitmentsUntil,
   listParticipants,
   markNotified,
   saveMessageId,
@@ -353,6 +354,29 @@ async function handleComponent(
   }
 }
 
+async function closeExpired(env: Env, now: Date): Promise<void> {
+  const recs = await listOpenRecruitmentsUntil(env.DB, gameToday(now));
+  for (const rec of recs) {
+    if (!isScopeOver(rec.scope, clockOf(rec.date, now))) continue;
+    try {
+      if (!(await finishRecruitment(env.DB, rec.id, "closed"))) continue;
+      if (!rec.messageId) {
+        console.error(`recruitment ${rec.id} has no message_id; board was not updated`);
+        continue;
+      }
+      const participants = await listParticipants(env.DB, rec.id);
+      await editChannelMessage(
+        env.DISCORD_BOT_TOKEN,
+        rec.channelId,
+        rec.messageId,
+        renderBoard({ ...rec, status: "closed" }, participants, now),
+      );
+    } catch (err: unknown) {
+      console.error(`closeExpired ${rec.id} failed`, err);
+    }
+  }
+}
+
 export default {
   async fetch(request, env, ctx): Promise<Response> {
     if (request.method !== "POST") return new Response("Not Found", { status: 404 });
@@ -378,5 +402,9 @@ export default {
       default:
         return new Response("Unsupported interaction", { status: 400 });
     }
+  },
+
+  async scheduled(controller, env, ctx): Promise<void> {
+    runInBackground(ctx, "closeExpired", closeExpired(env, new Date(controller.scheduledTime)));
   },
 } satisfies ExportedHandler<Env>;

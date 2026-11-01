@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { clockOf } from "./date.ts";
 import {
   bucketOf,
   bucketsOf,
@@ -108,6 +109,11 @@ describe("isScopeOver", () => {
   it("いつでもは深夜の最後の時刻が過ぎたら終わり", () => {
     expect(isScopeOver("any", 29.5)).toBe(false);
     expect(isScopeOver("any", 30)).toBe(true);
+  });
+
+  it("深夜の募集は翌日の 6 時に終わる", () => {
+    expect(isScopeOver("late", clockOf("2026-11-01", jst("2026-11-02T05:59:00")))).toBe(false);
+    expect(isScopeOver("late", clockOf("2026-11-01", jst("2026-11-02T06:00:00")))).toBe(true);
   });
 });
 
