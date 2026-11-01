@@ -3,6 +3,7 @@ import { ApplicationCommandOptionType, type RESTPutAPIApplicationGuildCommandsJS
 export const RECRUIT_COMMAND = "募集";
 export const GAME_COMMAND = "game";
 export const SCOPE_OPTION = "時間帯";
+export const USAGE_COMMAND = "使い方";
 
 export const commands: RESTPutAPIApplicationGuildCommandsJSONBody = [
   {
@@ -88,5 +89,9 @@ export const commands: RESTPutAPIApplicationGuildCommandsJSONBody = [
         description: "日付（例: 11/3、明日）。省略すると今日（0〜5時は前日の深夜扱い）",
       },
     ],
+  },
+  {
+    name: USAGE_COMMAND,
+    description: "この bot の使い方を自分にだけ表示する",
   },
 ];
