@@ -166,3 +166,7 @@ npm test
 - `npm run dev` には workerd が必要。npm の設定で install script が止められているときは、先に `npm install-scripts approve workerd` と `npm rebuild workerd` を実行する
 - `wrangler.jsonc` を変えたら、`npm run types` で `worker-configuration.d.ts` を作り直す
 - 画面の動きを確かめるためのモックが `docs/mock.html` にある
+
+## ライセンス
+
+[MIT](LICENSE)
