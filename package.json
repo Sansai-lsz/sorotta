@@ -11,11 +11,14 @@
     "register": "node --env-file=.dev.vars scripts/register.ts",
     "types": "wrangler types --strict-vars=false",
     "typecheck": "tsc --noEmit && tsc --noEmit -p scripts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
     "discord-api-types": "^0.38.57",
+    "oxfmt": "0.74.0",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5",
     "wrangler": "^4.156.0"
