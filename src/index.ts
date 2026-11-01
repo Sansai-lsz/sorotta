@@ -13,7 +13,7 @@ import {
 } from "discord-api-types/v10";
 import { resolveAnswer, type AnswerAction, type AnswerOp, type AnswerResult } from "./answer.ts";
 import { bucketOf, isScope, isScopeOver, openHours, planRecruitment, type Scope } from "./buckets.ts";
-import { GAME_COMMAND, NOTIFY_OPTION, RECRUIT_COMMAND, SCOPE_OPTION } from "./commands.ts";
+import { GAME_COMMAND, NOTIFY_OPTION, RECRUIT_COMMAND, SCOPE_OPTION, USAGE_COMMAND } from "./commands.ts";
 import { parseCustomId, parseSelectValue, type ComponentAction } from "./customId.ts";
 import { hoursSinceDateStart, gameToday, parseDateInput } from "./date.ts";
 import {
@@ -54,6 +54,7 @@ import {
   withRoleMention,
 } from "./render.ts";
 import { cancelNoticeTargets, tallyRecruitment, type Participant } from "./tally.ts";
+import { usageResponse } from "./usage.ts";
 import { verifySignature } from "./verify.ts";
 
 type Option = APIApplicationCommandInteractionDataOption;
@@ -243,6 +244,8 @@ async function handleCommand(
       return handleGameCommand(interaction, env, guildId);
     case RECRUIT_COMMAND:
       return handleRecruitCommand(interaction, env, ctx, guildId);
+    case USAGE_COMMAND:
+      return usageResponse();
     default:
       return reply("不明なコマンドです", { ephemeral: true });
   }

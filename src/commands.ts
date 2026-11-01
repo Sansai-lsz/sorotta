@@ -4,6 +4,7 @@ export const RECRUIT_COMMAND = "募集";
 export const GAME_COMMAND = "game";
 export const SCOPE_OPTION = "時間帯";
 export const NOTIFY_OPTION = "通知";
+export const USAGE_COMMAND = "使い方";
 
 export const commands: RESTPutAPIApplicationGuildCommandsJSONBody = [
   {
@@ -99,5 +100,9 @@ export const commands: RESTPutAPIApplicationGuildCommandsJSONBody = [
         description: "メンションするロール。省略すると /game add で登録したロール",
       },
     ],
+  },
+  {
+    name: USAGE_COMMAND,
+    description: "この bot の使い方を自分にだけ表示する",
   },
 ];
