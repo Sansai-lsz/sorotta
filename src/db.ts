@@ -1,6 +1,6 @@
 import type { AnswerOp } from "./answer.ts";
 import { isBucketKey, isScope, type BucketKey } from "./buckets.ts";
-import { isRecruitmentStatus, type Recruitment } from "./recruitment.ts";
+import { isRecruitmentStatus, type ReadySlot, type Recruitment } from "./recruitment.ts";
 import type { Participant, Slot } from "./tally.ts";
 
 export type Game = { name: string; min: number; max: number | null };
@@ -45,17 +45,24 @@ export async function deleteGame(db: D1Database, guildId: string, name: string):
   return result.meta.changes > 0;
 }
 
-type RecruitmentRow = Omit<Recruitment, "scope" | "status"> & { scope: string; status: string };
+type RecruitmentRow = Omit<Recruitment, "scope" | "status" | "notifiedSlot"> & {
+  scope: string;
+  status: string;
+  readyBucket: string | null;
+  readyHour: number | null;
+};
 
 const RECRUITMENT_COLUMNS =
-  "id, guild_id AS guildId, channel_id AS channelId, message_id AS messageId, game, required AS min, max_players AS max, date, scope, recruiter_id AS hostId, status";
+  "id, guild_id AS guildId, channel_id AS channelId, message_id AS messageId, game, required AS min, max_players AS max, date, scope, recruiter_id AS hostId, status, ready_bucket AS readyBucket, ready_hour AS readyHour";
 
 function parseRecruitment(row: RecruitmentRow): Recruitment {
-  const { scope, status } = row;
+  const { scope, status, readyBucket, readyHour, ...rest } = row;
   if (!isScope(scope) || !isRecruitmentStatus(status)) {
     throw new Error(`invalid recruitment row ${row.id}: scope=${scope} status=${status}`);
   }
-  return { ...row, scope, status };
+  if (readyBucket === null || readyHour === null) return { ...rest, scope, status, notifiedSlot: null };
+  if (!isBucketKey(readyBucket)) throw new Error(`invalid recruitment row ${row.id}: ready_bucket=${readyBucket}`);
+  return { ...rest, scope, status, notifiedSlot: { bucket: readyBucket, hour: readyHour } };
 }
 
 function answerStatements(db: D1Database, recruitmentId: string, userId: string, op: AnswerOp): D1PreparedStatement[] {
@@ -169,10 +176,12 @@ export async function listParticipants(db: D1Database, recruitmentId: string): P
 }
 
 /** 通知済みにする。ほぼ同時に押されても true を返すのは 1 回だけ */
-export async function markNotified(db: D1Database, recruitmentId: string): Promise<boolean> {
+export async function markNotified(db: D1Database, recruitmentId: string, slot: ReadySlot): Promise<boolean> {
   const result = await db
-    .prepare("UPDATE recruitments SET notified_at = datetime('now') WHERE id = ? AND notified_at IS NULL")
-    .bind(recruitmentId)
+    .prepare(
+      "UPDATE recruitments SET notified_at = datetime('now'), ready_bucket = ?, ready_hour = ? WHERE id = ? AND notified_at IS NULL",
+    )
+    .bind(slot.bucket, slot.hour, recruitmentId)
     .run();
   return result.meta.changes === 1;
 }

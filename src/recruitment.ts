@@ -1,6 +1,8 @@
-import type { Scope } from "./buckets.ts";
+import type { BucketKey, Scope } from "./buckets.ts";
 
 export type RecruitmentStatus = "open" | "closed" | "cancelled";
+
+export type ReadySlot = { bucket: BucketKey; hour: number };
 
 export type Recruitment = {
   id: string;
@@ -14,6 +16,7 @@ export type Recruitment = {
   scope: Scope;
   hostId: string;
   status: RecruitmentStatus;
+  notifiedSlot: ReadySlot | null;
 };
 
 export function isRecruitmentStatus(s: string): s is RecruitmentStatus {

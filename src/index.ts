@@ -81,6 +81,20 @@ function runInBackground(ctx: ExecutionContext, label: string, task: Promise<voi
   );
 }
 
+async function notifyIfReady(
+  env: Env,
+  token: string,
+  rec: Recruitment,
+  participants: Participant[],
+  now: Date,
+): Promise<void> {
+  const { outcome } = tallyRecruitment(rec, participants, now);
+  if (outcome.kind !== "ready") return;
+  if (await markNotified(env.DB, rec.id, outcome.ready)) {
+    await followUp(env.DISCORD_APP_ID, token, renderReadyNotice(rec, outcome.ready));
+  }
+}
+
 async function handleGameCommand(
   interaction: APIChatInputApplicationCommandInteraction,
   env: Env,
@@ -165,6 +179,7 @@ async function handleRecruitCommand(
     scope: plan.scope,
     hostId,
     status: "open",
+    notifiedSlot: null,
   };
   await createRecruitment(env.DB, rec, host.op);
   const participants: Participant[] = [{ userId: hostId, ...host.participant }];
@@ -175,10 +190,7 @@ async function handleRecruitCommand(
     (async () => {
       const messageId = await getOriginalMessageId(env.DISCORD_APP_ID, interaction.token);
       if (messageId) await saveMessageId(env.DB, rec.id, messageId);
-      const { ready } = tallyRecruitment(rec, participants, now);
-      if (ready && (await markNotified(env.DB, rec.id))) {
-        await followUp(env.DISCORD_APP_ID, interaction.token, renderReadyNotice(rec, ready));
-      }
+      await notifyIfReady(env, interaction.token, rec, participants, now);
     })(),
   );
   return respond({ type: InteractionResponseType.ChannelMessageWithSource, data: renderBoard(rec, participants, now) });
@@ -246,10 +258,7 @@ async function updateBoard(
   await applyAnswer(env.DB, rec.id, userId, result.op);
   const participants = await listParticipants(env.DB, rec.id);
   await editOriginal(env.DISCORD_APP_ID, interaction.token, renderBoard(rec, participants, now));
-  const { ready } = tallyRecruitment(rec, participants, now);
-  if (ready && (await markNotified(env.DB, rec.id))) {
-    await followUp(env.DISCORD_APP_ID, interaction.token, renderReadyNotice(rec, ready));
-  }
+  await notifyIfReady(env, interaction.token, rec, participants, now);
 }
 
 async function finishFromPanel(

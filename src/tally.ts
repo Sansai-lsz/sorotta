@@ -1,6 +1,6 @@
 import { bucketsOf, isHourOver, type BucketKey, type Scope } from "./buckets.ts";
 import { hoursSinceDateStart } from "./date.ts";
-import type { Recruitment } from "./recruitment.ts";
+import type { ReadySlot, Recruitment } from "./recruitment.ts";
 
 export type Slot = { hour: number; now: boolean };
 
@@ -20,46 +20,74 @@ export function activeParticipants(participants: Participant[]): ActiveParticipa
 
 export type Ready = { bucket: BucketKey; hour: number; members: string[]; reserves: string[] };
 
-export type Tally = { ready: Ready | null; best: number; passed: string[]; anytime: string[] };
+export type Outcome = { kind: "ready"; ready: Ready } | { kind: "short"; missing: number } | { kind: "missed" };
 
-/**
- * 開始時刻が早い人はそれ以降の時刻にも参加できるとみなす。
- * ただし時間帯をまたいでは数えない（朝から来られる人が夜も空いているとは限らないため）。
- * clock が null なら過ぎた時刻も数える（締め切り・中止の後も結果を残すため）
- */
-export function tally(input: {
-  scope: Scope;
-  participants: Participant[];
-  min: number;
-  max: number | null;
-  clock: number | null;
-}): Tally {
-  const { scope, participants, min, max, clock } = input;
-  const active = activeParticipants(participants);
-  let best = 0;
-  let ready: Ready | null = null;
-  for (const bucket of bucketsOf(scope)) {
-    for (const hour of bucket.hours) {
-      if (clock !== null && isHourOver(hour, clock)) continue;
-      const available = active.filter((p) => p.anytime || (p.slots[bucket.key]?.hour ?? Infinity) <= hour).map((p) => p.userId);
-      best = Math.max(best, available.length);
-      if (ready === null && available.length >= min) {
-        const cap = max ?? available.length;
-        ready = { bucket: bucket.key, hour, members: available.slice(0, cap), reserves: available.slice(cap) };
-      }
-    }
-  }
+export type Tally = { outcome: Outcome; passed: string[]; anytime: string[] };
+
+type TallyInput = { participants: Participant[]; min: number; max: number | null };
+
+function availableAt(active: ActiveParticipant[], bucket: BucketKey, hour: number): string[] {
+  return active.filter((p) => p.anytime || (p.slots[bucket]?.hour ?? Infinity) <= hour).map((p) => p.userId);
+}
+
+function readyOf(slot: ReadySlot, available: string[], max: number | null): Ready {
+  const cap = max ?? available.length;
+  return { ...slot, members: available.slice(0, cap), reserves: available.slice(cap) };
+}
+
+function withLists(participants: Participant[], outcome: Outcome): Tally {
   return {
-    ready,
-    best,
+    outcome,
     passed: participants.filter((p) => p.passed).map((p) => p.userId),
-    anytime: active.filter((p) => p.anytime).map((p) => p.userId),
+    anytime: activeParticipants(participants)
+      .filter((p) => p.anytime)
+      .map((p) => p.userId),
   };
 }
 
+/**
+ * 開始時刻が早い人はそれ以降の時刻にも参加できるとみなす。
+ * ただし時間帯をまたいでは数えない（朝から来られる人が夜も空いているとは限らないため）
+ */
+export function tally(input: TallyInput & { scope: Scope; clock: number }): Tally {
+  const { scope, participants, min, max, clock } = input;
+  const active = activeParticipants(participants);
+  let best = 0;
+  for (const bucket of bucketsOf(scope)) {
+    for (const hour of bucket.hours) {
+      if (isHourOver(hour, clock)) continue;
+      const available = availableAt(active, bucket.key, hour);
+      if (available.length >= min) {
+        return withLists(participants, { kind: "ready", ready: readyOf({ bucket: bucket.key, hour }, available, max) });
+      }
+      best = Math.max(best, available.length);
+    }
+  }
+  return withLists(participants, { kind: "short", missing: min - best });
+}
+
+/** 終わった募集は通知した時刻だけを見て、今もそろっていればその結果を残す */
+export function tallyEnded(input: TallyInput & { notifiedSlot: ReadySlot | null }): Tally {
+  const { participants, min, max, notifiedSlot } = input;
+  if (notifiedSlot === null) return withLists(participants, { kind: "missed" });
+  const available = availableAt(activeParticipants(participants), notifiedSlot.bucket, notifiedSlot.hour);
+  return withLists(
+    participants,
+    available.length >= min ? { kind: "ready", ready: readyOf(notifiedSlot, available, max) } : { kind: "missed" },
+  );
+}
+
+/** 受付中なら募集日 0 時からの経過時間、終わっていれば null */
+export function recruitmentClock(rec: Recruitment, now: Date): number | null {
+  return rec.status === "open" ? hoursSinceDateStart(rec.date, now) : null;
+}
+
 export function tallyRecruitment(rec: Recruitment, participants: Participant[], now: Date): Tally {
-  const clock = rec.status === "open" ? hoursSinceDateStart(rec.date, now) : null;
-  return tally({ scope: rec.scope, participants, min: rec.min, max: rec.max, clock });
+  const clock = recruitmentClock(rec, now);
+  const input = { participants, min: rec.min, max: rec.max };
+  return clock === null
+    ? tallyEnded({ ...input, notifiedSlot: rec.notifiedSlot })
+    : tally({ ...input, scope: rec.scope, clock });
 }
 
 export function cancelNoticeTargets(rec: { hostId: string }, participants: Participant[]): string[] {

@@ -99,6 +99,7 @@ const rec: Recruitment = {
   scope: "any",
   hostId: "host",
   status: "open",
+  notifiedSlot: null,
 };
 
 describe("db", () => {
@@ -166,9 +167,10 @@ describe("db", () => {
     expect((await getRecruitment(db, rec.id))?.status).toBe("closed");
   });
 
-  it("通知済みにできるのは 1 回だけ", async () => {
-    expect(await markNotified(db, rec.id)).toBe(true);
-    expect(await markNotified(db, rec.id)).toBe(false);
+  it("通知済みにできるのは 1 回だけで、最初に通知した時刻を残す", async () => {
+    expect(await markNotified(db, rec.id, { bucket: "night", hour: 20 })).toBe(true);
+    expect(await markNotified(db, rec.id, { bucket: "noon", hour: 12 })).toBe(false);
+    expect((await getRecruitment(db, rec.id))?.notifiedSlot).toEqual({ bucket: "night", hour: 20 });
   });
 });
 
@@ -197,6 +199,7 @@ describe("migration 0002", () => {
       scope: "night",
       hostId: "host",
       status: "closed",
+      notifiedSlot: null,
     });
     expect(sqlite.prepare("SELECT name FROM sqlite_master WHERE name = 'entries'").all()).toEqual([]);
   });

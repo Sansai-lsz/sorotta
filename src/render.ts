@@ -19,9 +19,17 @@ import {
   type Bucket,
 } from "./buckets.ts";
 import { encodeCustomId, encodeSelectValue } from "./customId.ts";
-import { hoursSinceDateStart, formatDate } from "./date.ts";
+import { formatDate } from "./date.ts";
 import type { Recruitment } from "./recruitment.ts";
-import { activeParticipants, tally, type Participant, type Ready, type Slot } from "./tally.ts";
+import {
+  activeParticipants,
+  recruitmentClock,
+  tallyRecruitment,
+  type Outcome,
+  type Participant,
+  type Ready,
+  type Slot,
+} from "./tally.ts";
 
 type ActionRow = APIActionRowComponent<APIComponentInMessageActionRow>;
 
@@ -58,9 +66,9 @@ function chunk<T>(items: T[], size: number): T[][] {
 
 export function renderBoard(rec: Recruitment, participants: Participant[], now: Date): APIInteractionResponseCallbackData {
   const ended = rec.status !== "open";
-  const clock = ended ? null : hoursSinceDateStart(rec.date, now);
-  const t = tally({ scope: rec.scope, participants, min: rec.min, max: rec.max, clock });
-  const reserves = new Set(t.ready?.reserves ?? []);
+  const clock = recruitmentClock(rec, now);
+  const t = tallyRecruitment(rec, participants, now);
+  const reserves = new Set(t.outcome.kind === "ready" ? t.outcome.ready.reserves : []);
   const over = (hour: number) => clock !== null && isHourOver(hour, clock);
   const answered = activeParticipants(participants);
   const scope = rec.scope;
@@ -94,13 +102,7 @@ export function renderBoard(rec: Recruitment, participants: Participant[], now: 
   }
 
   const lines = [`募集: ${mention(rec.hostId)}（${playersLabel(rec.min, rec.max)}）`, "", ...rows, ""];
-  if (t.ready) {
-    const where = rec.scope === "any" ? `${bucketOf(t.ready.bucket).label} ` : "";
-    lines.push(`✅ **${where}${shortHourLabel(t.ready.hour)}なら ${t.ready.members.length}人そろう**`);
-    if (t.ready.reserves.length > 0) lines.push(`補欠: ${mentions(t.ready.reserves)}`);
-  } else {
-    lines.push(`あと ${rec.min - t.best}人`);
-  }
+  lines.push(...outcomeLines(rec, t.outcome));
   if (t.passed.length > 0) lines.push(`パス: ${mentions(t.passed)}`);
   if (ended) lines.push("", rec.status === "cancelled" ? "この募集は中止されました" : "この募集は締め切られました");
 
@@ -109,7 +111,7 @@ export function renderBoard(rec: Recruitment, participants: Participant[], now: 
   const embed: APIEmbed = {
     title: `🎮 ${rec.game} やる人？ ${formatDate(rec.date)} ${when}${badge}`,
     description: lines.join("\n"),
-    color: ended ? COLOR_ENDED : t.ready ? COLOR_READY : COLOR_OPEN,
+    color: ended ? COLOR_ENDED : t.outcome.kind === "ready" ? COLOR_READY : COLOR_OPEN,
   };
 
   const components =
@@ -117,6 +119,22 @@ export function renderBoard(rec: Recruitment, participants: Participant[], now: 
 
   // 一覧のメンションは名前表示のためだけに使う。押すたびに全員へ通知が飛ばないよう抑止する
   return { embeds: [embed], components, allowed_mentions: { parse: [] } };
+}
+
+function outcomeLines(rec: Recruitment, outcome: Outcome): string[] {
+  switch (outcome.kind) {
+    case "ready": {
+      const { ready } = outcome;
+      const where = rec.scope === "any" ? `${bucketOf(ready.bucket).label} ` : "";
+      const lines = [`✅ **${where}${shortHourLabel(ready.hour)}なら ${ready.members.length}人そろう**`];
+      if (ready.reserves.length > 0) lines.push(`補欠: ${mentions(ready.reserves)}`);
+      return lines;
+    }
+    case "short":
+      return [`あと ${outcome.missing}人`];
+    case "missed":
+      return ["そろいませんでした"];
+  }
 }
 
 function footerButtons(rec: Recruitment): APIButtonComponent[] {

@@ -24,6 +24,7 @@ const base: Recruitment = {
   scope: "night",
   hostId: "host",
   status: "open",
+  notifiedSlot: null,
 };
 const anyRec: Recruitment = { ...base, scope: "any" };
 const lateRec: Recruitment = { ...base, scope: "late" };
@@ -198,8 +199,8 @@ describe("renderBoard（終わった募集）", () => {
   const participants = [at("a", night(18)), at("b", night(19)), at("c", night(20))];
   const after = jst("2026-11-02T07:00:00");
 
-  it("締め切ったらバッジを付け、ボタンを消し、過ぎた時刻も数えて結果を残す", () => {
-    const board = renderBoard({ ...base, status: "closed" }, participants, after);
+  it("締め切ったらバッジを付け、ボタンを消し、通知した時刻の結果を残す", () => {
+    const board = renderBoard({ ...base, status: "closed", notifiedSlot: { bucket: "night", hour: 20 } }, participants, after);
     expect(board.embeds?.[0]?.title).toBe("🎮 Apex やる人？ 11/1(日) 🌙夜 ［締め切り］");
     expect(board.embeds?.[0]?.description).toContain("✅ **20時〜なら 3人そろう**");
     expect(board.embeds?.[0]?.description).toContain("**18時〜**　<@a>");
@@ -208,9 +209,26 @@ describe("renderBoard（終わった募集）", () => {
     expect(board.components).toEqual([]);
   });
 
+  it("そろう前に終わったらそろわなかったと出す", () => {
+    const description = descriptionOf({ ...base, status: "closed" }, participants.slice(0, 2), after);
+    expect(description).toContain("そろいませんでした");
+    expect(description).not.toContain("あと");
+  });
+
+  it("いつでもOK の人がいても、過ぎた朝の時刻ではなく通知した時刻を結果にする", () => {
+    const description = descriptionOf(
+      { ...anyRec, status: "closed", notifiedSlot: { bucket: "night", hour: 20 } },
+      [{ userId: "x", passed: false, anytime: true, slots: {} }, ...participants.slice(0, 2), at("c", night(20))],
+      after,
+    );
+    expect(description).toContain("✅ **夜 20時〜なら 3人そろう**");
+    expect(description).toContain("補欠: <@c>");
+  });
+
   it("中止したらバッジと中止の文言を出す", () => {
     const board = renderBoard({ ...base, status: "cancelled" }, participants, after);
     expect(board.embeds?.[0]?.title).toBe("🎮 Apex やる人？ 11/1(日) 🌙夜 ［中止］");
+    expect(board.embeds?.[0]?.description).toContain("そろいませんでした");
     expect(board.embeds?.[0]?.description).toMatch(/この募集は中止されました$/);
     expect(board.components).toEqual([]);
   });
