@@ -1,4 +1,5 @@
 import { GAME_COMMAND, RECRUIT_COMMAND, USAGE_COMMAND } from "./commands.ts";
+import { reply } from "./discord.ts";
 
 export const USAGE_TEXT = `🎮 **ゲーム募集bot「そろった」の使い方**
 
@@ -17,7 +18,7 @@ export const USAGE_TEXT = `🎮 **ゲーム募集bot「そろった」の使い�
 ・⚡ 今すぐ → 今から参加できる
 ・🙆 いつでもOK（「いつでも」募集のみ）→ どの時間でもOK
 ・今日はパス → 不参加
-押し直せば上書きできます。
+選び直すと上書きされます（🙆 いつでもOK は押すたびにオン・オフが切り替わります）。
 
 **▶ そろったら**
 必要な人数がそろうと、メンバーにメンションでお知らせが来ます。
@@ -33,3 +34,7 @@ export const USAGE_TEXT = `🎮 **ゲーム募集bot「そろった」の使い�
 登録済みの一覧は \`/${GAME_COMMAND} list\`。
 
 この説明は \`/${USAGE_COMMAND}\` でいつでも見られます。`;
+
+export function usageResponse(): Response {
+  return reply(USAGE_TEXT, { ephemeral: true });
+}

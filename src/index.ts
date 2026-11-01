@@ -53,7 +53,7 @@ import {
   renderReadyNotice,
 } from "./render.ts";
 import { cancelNoticeTargets, tallyRecruitment, type Participant } from "./tally.ts";
-import { USAGE_TEXT } from "./usage.ts";
+import { usageResponse } from "./usage.ts";
 import { verifySignature } from "./verify.ts";
 
 type Option = APIApplicationCommandInteractionDataOption;
@@ -233,7 +233,7 @@ async function handleCommand(
     case RECRUIT_COMMAND:
       return handleRecruitCommand(interaction, env, ctx, guildId);
     case USAGE_COMMAND:
-      return reply(USAGE_TEXT, { ephemeral: true });
+      return usageResponse();
     default:
       return reply("不明なコマンドです", { ephemeral: true });
   }
