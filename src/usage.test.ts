@@ -1,6 +1,6 @@
 import { MessageFlags } from "discord-api-types/v10";
 import { describe, expect, it } from "vitest";
-import { commands, GAME_COMMAND, RECRUIT_COMMAND, USAGE_COMMAND } from "./commands.ts";
+import { commands, GAME_COMMAND, NOTIFY_OPTION, RECRUIT_COMMAND, USAGE_COMMAND } from "./commands.ts";
 import { USAGE_TEXT, usageResponse } from "./usage.ts";
 
 // Discord の 1 メッセージの上限
@@ -15,6 +15,8 @@ describe("USAGE_TEXT", () => {
     expect(USAGE_TEXT).toContain(`/${RECRUIT_COMMAND}`);
     expect(USAGE_TEXT).toContain(`/${GAME_COMMAND} add`);
     expect(USAGE_TEXT).toContain(`/${USAGE_COMMAND}`);
+    expect(USAGE_TEXT).toContain(`${NOTIFY_OPTION}:`);
+    expect(USAGE_TEXT).toContain("role:");
   });
 });
 

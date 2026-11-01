@@ -3,6 +3,7 @@ import { ApplicationCommandOptionType, type RESTPutAPIApplicationGuildCommandsJS
 export const RECRUIT_COMMAND = "募集";
 export const GAME_COMMAND = "game";
 export const SCOPE_OPTION = "時間帯";
+export const NOTIFY_OPTION = "通知";
 export const USAGE_COMMAND = "使い方";
 
 export const commands: RESTPutAPIApplicationGuildCommandsJSONBody = [
@@ -13,7 +14,7 @@ export const commands: RESTPutAPIApplicationGuildCommandsJSONBody = [
       {
         type: ApplicationCommandOptionType.Subcommand,
         name: "add",
-        description: "ゲームを登録する（登録済みなら人数を上書き）",
+        description: "ゲームを登録する（登録済みなら人数・定員・ロールを上書き）",
         options: [
           {
             type: ApplicationCommandOptionType.String,
@@ -36,6 +37,11 @@ export const commands: RESTPutAPIApplicationGuildCommandsJSONBody = [
             description: "定員。省略すると定員なし",
             min_value: 1,
             max_value: 99,
+          },
+          {
+            type: ApplicationCommandOptionType.Role,
+            name: "role",
+            description: "このゲームの募集でメンションするロール。省略するとメンションしない",
           },
         ],
       },
@@ -87,6 +93,11 @@ export const commands: RESTPutAPIApplicationGuildCommandsJSONBody = [
         type: ApplicationCommandOptionType.String,
         name: "date",
         description: "日付（例: 11/3、明日）。省略すると今日（0〜5時は前日の深夜扱い）",
+      },
+      {
+        type: ApplicationCommandOptionType.Role,
+        name: NOTIFY_OPTION,
+        description: "メンションするロール。省略すると /game add で登録したロール",
       },
     ],
   },
