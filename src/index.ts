@@ -206,13 +206,12 @@ async function handleRecruitCommand(
   runInBackground(
     ctx,
     "afterRecruit",
-    Promise.all([
-      (async () => {
-        const messageId = await getOriginalMessageId(env.DISCORD_APP_ID, interaction.token);
-        if (messageId) await saveMessageId(env.DB, rec.id, messageId);
-      })(),
-      notifyIfReady(env, interaction.token, snapshot.rec, snapshot.participants, now),
-    ]),
+    // 元の応答が Discord に届く前に followUp すると失敗し、markNotified 済みのため通知が失われる
+    (async () => {
+      const messageId = await getOriginalMessageId(env.DISCORD_APP_ID, interaction.token);
+      if (messageId) await saveMessageId(env.DB, rec.id, messageId);
+      await notifyIfReady(env, interaction.token, snapshot.rec, snapshot.participants, now);
+    })(),
   );
   return respond({
     type: InteractionResponseType.ChannelMessageWithSource,
