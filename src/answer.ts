@@ -35,23 +35,25 @@ function slotNow(bucket: BucketKey, clock: number): AnswerResult {
   return { ok: true, op: { kind: "slot", bucket, hour, now: true } };
 }
 
+function resolveSelect(bucket: BucketKey, value: SelectValue, clock: number): AnswerResult {
+  switch (value.kind) {
+    case "hour":
+      return slotAt(bucket, value.hour, clock);
+    case "now":
+      return slotNow(bucket, clock);
+    case "none":
+      return { ok: true, op: { kind: "clear", bucket } };
+  }
+}
+
 export function resolveAnswer(action: AnswerAction, rec: { scope: Scope }, clock: number): AnswerResult {
   switch (action.kind) {
     case "hour":
       return rec.scope === "any" ? INVALID : slotAt(rec.scope, action.hour, clock);
     case "now":
       return inScope(rec.scope, action.bucket) ? slotNow(action.bucket, clock) : INVALID;
-    case "select": {
-      if (!inScope(rec.scope, action.bucket)) return INVALID;
-      switch (action.value.kind) {
-        case "hour":
-          return slotAt(action.bucket, action.value.hour, clock);
-        case "now":
-          return slotNow(action.bucket, clock);
-        case "none":
-          return { ok: true, op: { kind: "clear", bucket: action.bucket } };
-      }
-    }
+    case "select":
+      return inScope(rec.scope, action.bucket) ? resolveSelect(action.bucket, action.value, clock) : INVALID;
     case "anytime":
       return rec.scope === "any" ? { ok: true, op: { kind: "toggleAnytime" } } : INVALID;
     case "pass":

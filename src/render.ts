@@ -19,9 +19,9 @@ import {
   type Bucket,
 } from "./buckets.ts";
 import { encodeCustomId, encodeSelectValue } from "./customId.ts";
-import { clockOf, formatDate } from "./date.ts";
+import { hoursSinceDateStart, formatDate } from "./date.ts";
 import type { Recruitment } from "./recruitment.ts";
-import { tally, type Participant, type Ready, type Slot } from "./tally.ts";
+import { activeParticipants, tally, type Participant, type Ready, type Slot } from "./tally.ts";
 
 type ActionRow = APIActionRowComponent<APIComponentInMessageActionRow>;
 
@@ -58,11 +58,11 @@ function chunk<T>(items: T[], size: number): T[][] {
 
 export function renderBoard(rec: Recruitment, participants: Participant[], now: Date): APIInteractionResponseCallbackData {
   const ended = rec.status !== "open";
-  const clock = ended ? null : clockOf(rec.date, now);
+  const clock = ended ? null : hoursSinceDateStart(rec.date, now);
   const t = tally({ scope: rec.scope, participants, min: rec.min, max: rec.max, clock });
   const reserves = new Set(t.ready?.reserves ?? []);
   const over = (hour: number) => clock !== null && isHourOver(hour, clock);
-  const answered = participants.filter((p) => !p.passed);
+  const answered = activeParticipants(participants);
   const scope = rec.scope;
 
   const chip = (userId: string, slot: Slot | undefined) =>

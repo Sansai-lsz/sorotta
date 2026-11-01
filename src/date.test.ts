@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, clockOf, formatDate, formatMonthDay, gameToday, parseDateInput } from "./date.ts";
+import { addDays, hoursSinceDateStart, formatDate, formatMonthDay, gameToday, parseDateInput } from "./date.ts";
 
 const jst = (local: string) => new Date(`${local}+09:00`);
 
@@ -15,17 +15,17 @@ describe("gameToday", () => {
   });
 });
 
-describe("clockOf", () => {
+describe("hoursSinceDateStart", () => {
   it("募集日の JST 0 時からの経過時間を返す", () => {
-    expect(clockOf("2026-11-01", jst("2026-11-01T16:30:00"))).toBe(16.5);
+    expect(hoursSinceDateStart("2026-11-01", jst("2026-11-01T16:30:00"))).toBe(16.5);
   });
 
   it("翌日の 1 時は 25", () => {
-    expect(clockOf("2026-11-01", jst("2026-11-02T01:00:00"))).toBe(25);
+    expect(hoursSinceDateStart("2026-11-01", jst("2026-11-02T01:00:00"))).toBe(25);
   });
 
   it("募集日より前なら負になる", () => {
-    expect(clockOf("2026-11-02", jst("2026-11-01T21:00:00"))).toBe(-3);
+    expect(hoursSinceDateStart("2026-11-02", jst("2026-11-01T21:00:00"))).toBe(-3);
   });
 });
 

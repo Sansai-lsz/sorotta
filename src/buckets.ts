@@ -1,4 +1,4 @@
-import { addDays, clockOf, formatMonthDay, gameToday } from "./date.ts";
+import { addDays, hoursSinceDateStart, formatMonthDay, gameToday } from "./date.ts";
 
 // 深夜は募集日の翌日 0〜5 時だが、同じ募集の中で並べて数えるため 24〜29 として扱う
 export const BUCKETS = [
@@ -22,10 +22,15 @@ export function isScope(s: string): s is Scope {
   return s === "any" || isBucketKey(s);
 }
 
+const BUCKET_BY_KEY = {
+  morning: BUCKETS[0],
+  noon: BUCKETS[1],
+  night: BUCKETS[2],
+  late: BUCKETS[3],
+} satisfies { [K in BucketKey]: Extract<Bucket, { key: K }> };
+
 export function bucketOf(key: BucketKey): Bucket {
-  const bucket = BUCKETS.find((b) => b.key === key);
-  if (!bucket) throw new Error(`unknown bucket: ${key}`);
-  return bucket;
+  return BUCKET_BY_KEY[key];
 }
 
 export function bucketsOf(scope: Scope): readonly Bucket[] {
@@ -65,7 +70,7 @@ export type PlanResult = { ok: true; date: string; scope: Scope } | { ok: false;
 
 export function planRecruitment(input: { date: string; scope: Scope | undefined }, now: Date): PlanResult {
   const { date, scope } = input;
-  const clock = clockOf(date, now);
+  const clock = hoursSinceDateStart(date, now);
   if (scope !== undefined) {
     return isScopeOver(scope, clock) ? { ok: false, error: "over" } : { ok: true, date, scope };
   }

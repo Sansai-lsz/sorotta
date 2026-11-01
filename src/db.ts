@@ -1,7 +1,7 @@
 import type { AnswerOp } from "./answer.ts";
-import { isBucketKey, isScope } from "./buckets.ts";
+import { isBucketKey, isScope, type BucketKey } from "./buckets.ts";
 import { isRecruitmentStatus, type Recruitment } from "./recruitment.ts";
-import type { Participant } from "./tally.ts";
+import type { Participant, Slot } from "./tally.ts";
 
 export type Game = { name: string; min: number; max: number | null };
 
@@ -154,18 +154,18 @@ export async function listParticipants(db: D1Database, recruitmentId: string): P
       .bind(recruitmentId)
       .all<SlotRow>(),
   ]);
-  const byUser = new Map<string, Participant>(
-    participants.results.map((row) => [
-      row.userId,
-      { userId: row.userId, passed: row.passed === 1, anytime: row.anytime === 1, slots: {} },
-    ]),
-  );
+  const slotsByUser = new Map<string, Partial<Record<BucketKey, Slot>>>();
   for (const row of slots.results) {
     if (!isBucketKey(row.bucket)) throw new Error(`invalid slot bucket in ${recruitmentId}: ${row.bucket}`);
-    const participant = byUser.get(row.userId);
-    if (participant) participant.slots[row.bucket] = { hour: row.hour, now: row.isNow === 1 };
+    const userSlots = slotsByUser.get(row.userId) ?? {};
+    userSlots[row.bucket] = { hour: row.hour, now: row.isNow === 1 };
+    slotsByUser.set(row.userId, userSlots);
   }
-  return [...byUser.values()];
+  return participants.results.map((row): Participant =>
+    row.passed === 1
+      ? { userId: row.userId, passed: true }
+      : { userId: row.userId, passed: false, anytime: row.anytime === 1, slots: slotsByUser.get(row.userId) ?? {} },
+  );
 }
 
 /** 通知済みにする。ほぼ同時に押されても true を返すのは 1 回だけ */

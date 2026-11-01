@@ -8,7 +8,7 @@ import {
   renderManagePanel,
   renderReadyNotice,
 } from "./render.ts";
-import type { Participant } from "./tally.ts";
+import type { ActiveParticipant, Participant } from "./tally.ts";
 
 const jst = (local: string) => new Date(`${local}+09:00`);
 
@@ -28,7 +28,7 @@ const base: Recruitment = {
 const anyRec: Recruitment = { ...base, scope: "any" };
 const lateRec: Recruitment = { ...base, scope: "late" };
 
-const at = (userId: string, slots: Participant["slots"]): Participant => ({ userId, passed: false, anytime: false, slots });
+const at = (userId: string, slots: ActiveParticipant["slots"]): Participant => ({ userId, passed: false, anytime: false, slots });
 const night = (hour: number, now = false) => ({ night: { hour, now } });
 
 function descriptionOf(rec: Recruitment, participants: Participant[], now: Date): string {
@@ -114,7 +114,7 @@ describe("renderBoard（時間帯を 1 つ指定した募集）", () => {
   it("そろっていなければ残り人数を出し、パスした人も並べる", () => {
     const description = descriptionOf(
       base,
-      [at("a", night(21)), { userId: "d", passed: true, anytime: false, slots: {} }],
+      [at("a", night(21)), { userId: "d", passed: true }],
       evening,
     );
     expect(description).toContain("あと 2人");

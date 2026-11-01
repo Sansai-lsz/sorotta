@@ -18,7 +18,7 @@ export function gameToday(now: Date): string {
   return toIsoDate(now.getTime() + JST_OFFSET_MS - GAME_DAY_START_HOUR * HOUR_MS);
 }
 
-export function clockOf(isoDate: string, now: Date): number {
+export function hoursSinceDateStart(isoDate: string, now: Date): number {
   return (now.getTime() - (isoDateMs(isoDate) - JST_OFFSET_MS)) / HOUR_MS;
 }
 

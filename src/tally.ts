@@ -1,16 +1,22 @@
 import { bucketsOf, isHourOver, type BucketKey, type Scope } from "./buckets.ts";
-import { clockOf } from "./date.ts";
+import { hoursSinceDateStart } from "./date.ts";
 import type { Recruitment } from "./recruitment.ts";
 
 export type Slot = { hour: number; now: boolean };
 
-/** 配列は最初に回答した順に並んでいる前提。passed のときは anytime=false・slots 空 */
-export type Participant = {
+export type ActiveParticipant = {
   userId: string;
-  passed: boolean;
+  passed: false;
   anytime: boolean;
   slots: Partial<Record<BucketKey, Slot>>;
 };
+
+/** 配列は最初に回答した順に並んでいる前提 */
+export type Participant = { userId: string; passed: true } | ActiveParticipant;
+
+export function activeParticipants(participants: Participant[]): ActiveParticipant[] {
+  return participants.filter((p): p is ActiveParticipant => !p.passed);
+}
 
 export type Ready = { bucket: BucketKey; hour: number; members: string[]; reserves: string[] };
 
@@ -29,7 +35,7 @@ export function tally(input: {
   clock: number | null;
 }): Tally {
   const { scope, participants, min, max, clock } = input;
-  const active = participants.filter((p) => !p.passed);
+  const active = activeParticipants(participants);
   let best = 0;
   let ready: Ready | null = null;
   for (const bucket of bucketsOf(scope)) {
@@ -52,12 +58,12 @@ export function tally(input: {
 }
 
 export function tallyRecruitment(rec: Recruitment, participants: Participant[], now: Date): Tally {
-  const clock = rec.status === "open" ? clockOf(rec.date, now) : null;
+  const clock = rec.status === "open" ? hoursSinceDateStart(rec.date, now) : null;
   return tally({ scope: rec.scope, participants, min: rec.min, max: rec.max, clock });
 }
 
 export function cancelNoticeTargets(rec: { hostId: string }, participants: Participant[]): string[] {
-  return participants
-    .filter((p) => !p.passed && p.userId !== rec.hostId && (p.anytime || Object.keys(p.slots).length > 0))
+  return activeParticipants(participants)
+    .filter((p) => p.userId !== rec.hostId && (p.anytime || Object.keys(p.slots).length > 0))
     .map((p) => p.userId);
 }

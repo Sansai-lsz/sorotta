@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { cancelNoticeTargets, tally, type Participant } from "./tally.ts";
+import { cancelNoticeTargets, tally, type ActiveParticipant, type Participant } from "./tally.ts";
 
-const at = (userId: string, slots: Participant["slots"]): Participant => ({ userId, passed: false, anytime: false, slots });
+const at = (userId: string, slots: ActiveParticipant["slots"]): Participant => ({ userId, passed: false, anytime: false, slots });
 const anytime = (userId: string): Participant => ({ userId, passed: false, anytime: true, slots: {} });
-const passed = (userId: string): Participant => ({ userId, passed: true, anytime: false, slots: {} });
+const passed = (userId: string): Participant => ({ userId, passed: true });
 const night = (hour: number) => ({ night: { hour, now: false } });
 
 describe("tally", () => {

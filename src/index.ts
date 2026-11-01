@@ -15,7 +15,7 @@ import { resolveAnswer, type AnswerAction, type AnswerOp } from "./answer.ts";
 import { bucketOf, isScope, isScopeOver, openHours, planRecruitment, type Scope } from "./buckets.ts";
 import { GAME_COMMAND, RECRUIT_COMMAND, SCOPE_OPTION } from "./commands.ts";
 import { parseCustomId, parseSelectValue, type ComponentAction } from "./customId.ts";
-import { clockOf, gameToday, parseDateInput } from "./date.ts";
+import { hoursSinceDateStart, gameToday, parseDateInput } from "./date.ts";
 import {
   applyAnswer,
   createRecruitment,
@@ -43,7 +43,7 @@ import {
 } from "./discord.ts";
 import type { Recruitment } from "./recruitment.ts";
 import { gameLabel, renderBoard, renderCancelNotice, renderManagePanel, renderReadyNotice } from "./render.ts";
-import { cancelNoticeTargets, tallyRecruitment, type Participant } from "./tally.ts";
+import { cancelNoticeTargets, tallyRecruitment, type ActiveParticipant, type Participant } from "./tally.ts";
 import { verifySignature } from "./verify.ts";
 
 type Option = APIApplicationCommandInteractionDataOption;
@@ -113,11 +113,11 @@ async function handleGameCommand(
   }
 }
 
-function hostJoin(scope: Scope, date: string, now: Date): { op: AnswerOp; participant: Omit<Participant, "userId"> } | null {
+function hostJoin(scope: Scope, date: string, now: Date): { op: AnswerOp; participant: Omit<ActiveParticipant, "userId"> } | null {
   if (scope === "any") {
     return { op: { kind: "toggleAnytime" }, participant: { passed: false, anytime: true, slots: {} } };
   }
-  const hour = openHours(bucketOf(scope), clockOf(date, now))[0];
+  const hour = openHours(bucketOf(scope), hoursSinceDateStart(date, now))[0];
   if (hour === undefined) return null;
   return {
     op: { kind: "slot", bucket: scope, hour, now: false },
@@ -240,7 +240,7 @@ async function updateBoard(
     await followUp(env.DISCORD_APP_ID, interaction.token, ephemeralMessage(message));
   };
   if (rec.status !== "open") return refuse("この募集は締め切られています");
-  const result = resolveAnswer(action, rec, clockOf(rec.date, now));
+  const result = resolveAnswer(action, rec, hoursSinceDateStart(rec.date, now));
   if (!result.ok) return refuse(result.message);
 
   await applyAnswer(env.DB, rec.id, userId, result.op);
@@ -356,7 +356,7 @@ async function handleComponent(
 async function closeExpired(env: Env, now: Date): Promise<void> {
   const recs = await listOpenRecruitmentsUntil(env.DB, gameToday(now));
   for (const rec of recs) {
-    if (!isScopeOver(rec.scope, clockOf(rec.date, now))) continue;
+    if (!isScopeOver(rec.scope, hoursSinceDateStart(rec.date, now))) continue;
     try {
       if (!(await finishRecruitment(env.DB, rec.id, "closed"))) continue;
       if (!rec.messageId) {
