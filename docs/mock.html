@@ -1,0 +1,508 @@
+<title>ゲーム募集 bot 操作イメージ</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+  /* 上に募集の作成と時刻操作、左にチャットの再現、右に「いま裏で何が起きたか」のログ。狭い画面では縦に積む */
+  :root {
+    --bg: #eef0f4;
+    --panel: #ffffff;
+    --chat: #f7f8fa;
+    --fg: #1d2129;
+    --muted: #646b78;
+    --line: #dde1e8;
+    --accent: #4f5bd5;
+    --accent-fg: #ffffff;
+    --btn2: #e3e6ec;
+    --btn2-fg: #2b303a;
+    --danger: #c9383f;
+    --danger-fg: #ffffff;
+    --ok: #1f9d55;
+    --ok-soft: #e3f5ea;
+    --mention-bg: #e3e6fb;
+    --mention-fg: #3d48b8;
+    --notice-bg: #fff6dc;
+    --notice-line: #e8b931;
+    --ephemeral-bg: #eef1fb;
+    --font-body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17191e; --panel: #1f2228; --chat: #24272e; --fg: #e6e8ed; --muted: #9aa1ad; --line: #343843;
+      --accent: #7480f0; --accent-fg: #0f1120; --btn2: #353a45; --btn2-fg: #e6e8ed; --danger: #e0636a; --danger-fg: #1a0b0c;
+      --ok: #4cc47f; --ok-soft: #1d3428; --mention-bg: #343a6b; --mention-fg: #c3c8ff; --notice-bg: #3a321a; --notice-line: #d4a72c;
+      --ephemeral-bg: #262b3d; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #17191e; --panel: #1f2228; --chat: #24272e; --fg: #e6e8ed; --muted: #9aa1ad; --line: #343843;
+    --accent: #7480f0; --accent-fg: #0f1120; --btn2: #353a45; --btn2-fg: #e6e8ed; --danger: #e0636a; --danger-fg: #1a0b0c;
+    --ok: #4cc47f; --ok-soft: #1d3428; --mention-bg: #343a6b; --mention-fg: #c3c8ff; --notice-bg: #3a321a; --notice-line: #d4a72c;
+    --ephemeral-bg: #262b3d; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.6;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 24px 40px;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 16px; }
+  header h1 { font-size: 1.4rem; margin: 0; text-wrap: balance; }
+  header p { margin: 4px 0 0; color: var(--muted); max-width: 65ch; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: end; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; }
+  .controls .lbl { font-size: 0.8rem; color: var(--muted); letter-spacing: 0.04em; display: block; margin-bottom: 4px; }
+  .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+  .seg button { font: inherit; font-size: 0.9rem; border: 1px solid var(--line); background: transparent; color: var(--fg); padding: 4px 12px; border-radius: 999px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+  .cmdline { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-family: var(--font-mono); font-size: 0.85rem; }
+  .cmdline select { font: inherit; background: var(--chat); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
+  .go { font: inherit; font-family: var(--font-body); font-size: 0.85rem; font-weight: 700; background: var(--accent); color: var(--accent-fg); border: 0; border-radius: 6px; padding: 5px 12px; cursor: pointer; }
+  .group { display: grid; gap: 4px; }
+  .divider { width: 1px; align-self: stretch; background: var(--line); }
+  @media (max-width: 700px) { .divider { display: none; } }
+
+  .main { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+  @media (max-width: 820px) { .main { grid-template-columns: minmax(0, 1fr); } }
+
+  .chat { background: var(--chat); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 16px; min-width: 0; }
+  .channel { font-weight: 700; color: var(--muted); font-size: 0.85rem; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+  .feed { display: grid; gap: 16px; }
+  .msg { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 10px; }
+  .avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--accent); color: var(--accent-fg); display: grid; place-items: center; font-weight: 700; font-size: 0.8rem; }
+  .who { font-weight: 700; }
+  .who .tag { font-size: 0.65rem; background: var(--accent); color: var(--accent-fg); border-radius: 3px; padding: 1px 4px; margin-left: 6px; vertical-align: 2px; }
+  .who time { font-weight: 400; color: var(--muted); font-size: 0.75rem; margin-left: 6px; font-family: var(--font-mono); }
+  .cmd { color: var(--muted); font-size: 0.85rem; }
+
+  .embed { margin-top: 6px; background: var(--panel); border-left: 4px solid var(--accent); border-radius: 4px; padding: 12px 14px; max-width: 560px; }
+  .embed.ready { border-left-color: var(--ok); }
+  .embed.ended { border-left-color: var(--muted); }
+  .embed h2 { font-size: 1rem; margin: 0 0 4px; }
+  .badge { font-size: 0.75rem; font-weight: 700; border-radius: 3px; padding: 1px 6px; margin-left: 6px; background: var(--btn2); color: var(--btn2-fg); vertical-align: 2px; }
+  .badge.cancel { background: var(--danger); color: var(--danger-fg); }
+  .rows { display: grid; gap: 3px; margin: 10px 0; }
+  .row { display: grid; grid-template-columns: 7.5em minmax(0, 1fr); gap: 8px; align-items: baseline; }
+  .row .h { font-family: var(--font-mono); font-size: 0.85rem; white-space: nowrap; }
+  .row .b { font-weight: 700; white-space: nowrap; }
+  .row.over { color: var(--muted); }
+  .people { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+  .mention { background: var(--mention-bg); color: var(--mention-fg); border-radius: 3px; padding: 0 3px; font-weight: 500; white-space: nowrap; }
+  .tagline { font-size: 0.75rem; color: var(--muted); }
+  .tm { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); }
+  .none { color: var(--muted); }
+  .status { font-weight: 700; }
+  .status.ok { color: var(--ok); }
+  .sub { color: var(--muted); font-size: 0.9rem; }
+  .ended-note { margin-top: 8px; font-size: 0.85rem; color: var(--muted); }
+
+  .buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .dbtn { font: inherit; font-size: 0.9rem; font-weight: 500; border: 0; border-radius: 4px; padding: 6px 12px; cursor: pointer; background: var(--accent); color: var(--accent-fg); font-variant-numeric: tabular-nums; }
+  .dbtn.secondary { background: var(--btn2); color: var(--btn2-fg); }
+  .dbtn.danger { background: var(--danger); color: var(--danger-fg); }
+  .dbtn.go-ok { background: var(--ok); color: var(--accent-fg); }
+  .dbtn.on { outline: 2px solid var(--ok); outline-offset: 1px; }
+  .dselect { display: block; width: 100%; max-width: 360px; margin-top: 8px; font: inherit; font-size: 0.9rem; background: var(--chat); color: var(--fg); border: 1px solid var(--line); border-radius: 4px; padding: 7px 10px; cursor: pointer; }
+  .dselect:disabled { opacity: 0.45; cursor: not-allowed; }
+  .dbtn:focus-visible, .seg button:focus-visible, .go:focus-visible, .dselect:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .ephemeral { background: var(--ephemeral-bg); border-radius: 6px; padding: 8px 12px; }
+  .ephemeral .note { font-size: 0.75rem; color: var(--muted); margin-top: 4px; }
+  .notice { background: var(--notice-bg); border-left: 3px solid var(--notice-line); border-radius: 4px; padding: 6px 10px; }
+
+  .log { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
+  .log h3 { font-size: 0.95rem; margin: 0 0 8px; }
+  .log ol { margin: 0; padding-left: 1.3em; display: grid; gap: 8px; font-size: 0.88rem; }
+  .log .t { font-family: var(--font-mono); font-size: 0.8rem; color: var(--muted); margin-right: 4px; }
+  .rules { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; font-size: 0.85rem; color: var(--muted); display: grid; gap: 6px; }
+  .rules b { color: var(--fg); }
+  @media (prefers-reduced-motion: no-preference) { .flash { animation: flash 0.6s ease-out; } }
+  @keyframes flash { from { background: var(--ok-soft); } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>ゲーム募集 bot 操作イメージ</h1>
+    <p>募集を作り、「操作する人」を切り替えながら答えて試せます。けん・はなこ・じろうの回答はサンプルです。「いまの時刻」を進めると、時間がたったときの見え方を確認できます。</p>
+  </header>
+
+  <div class="controls">
+    <div class="group">
+      <span class="lbl">募集を作る（たろうが実行）</span>
+      <div class="cmdline">/募集
+        <label>game <select id="game"></select></label>
+        <label>時間帯 <select id="bucket"></select></label>
+        <button class="go" id="create" type="button">実行</button>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="group">
+      <span class="lbl" id="who-label">操作する人</span>
+      <div class="seg" id="who" role="group" aria-labelledby="who-label"></div>
+    </div>
+    <div class="group">
+      <span class="lbl" id="now-label">いまの時刻</span>
+      <div class="seg" id="now" role="group" aria-labelledby="now-label"></div>
+    </div>
+  </div>
+
+  <div class="main">
+    <section class="chat" aria-label="チャンネルの再現">
+      <div class="channel"># ゲーム募集</div>
+      <div id="feed" class="feed"></div>
+    </section>
+    <aside class="log">
+      <h3>いま起きたこと</h3>
+      <ol id="log"></ol>
+      <div class="rules">
+        <div><b>時間帯を 1 つ指定</b>　時刻ボタンを 1 回押すだけ。省略すると、今の時間帯に 3 時間以上残っていればそこ、なければ次の時間帯</div>
+        <div><b>いつでも</b>　時間帯ごとのメニューで「何時から」を選ぶ。複数の時間帯に答えられる。🙆 いつでもOK は全時間帯の最初から数える</div>
+        <div><b>数え方</b>　21時〜の人は同じ時間帯の 22時にも参加できるとみなす</div>
+        <div><b>定員</b>　超えた人は答えた順に補欠</div>
+        <div><b>通知</b>　最少人数がそろった最初の 1 回だけ、参加メンバーにメンション</div>
+        <div><b>⚙ 管理</b>　押すとホストにだけ「締め切る」「中止」が出る。時間帯が終わると 1 時間ごとの定期処理で自動で締め切る</div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+  const BUCKETS = [
+    { key: "morning", label: "朝", emoji: "🌅", hours: [6, 7, 8, 9, 10, 11] },
+    { key: "noon", label: "昼", emoji: "☀️", hours: [12, 13, 14, 15, 16, 17] },
+    { key: "night", label: "夜", emoji: "🌙", hours: [18, 19, 20, 21, 22, 23] },
+    { key: "late", label: "深夜", emoji: "🌌", hours: [24, 25, 26, 27, 28, 29] },
+  ];
+  const GAMES = [
+    { name: "Apex", min: 3, max: 3 },
+    { name: "マイクラ", min: 2, max: null },
+    { name: "スト6", min: 2, max: 2 },
+  ];
+  const USERS = ["たろう", "はなこ", "けん", "じろう", "みき"];
+  const NOWS = [{ label: "9:00", h: 9 }, { label: "15:00", h: 15 }, { label: "16:30", h: 16.5 }, { label: "21:30", h: 21.5 }, { label: "翌1:00", h: 25 }];
+  const HOST = "たろう";
+
+  let state = { me: "はなこ", now: 15, rec: null, log: [], seq: 0 };
+
+  const nowLabel = () => NOWS.find((n) => n.h === state.now).label;
+  const hourLabel = (h) => (h >= 24 ? `${h - 24}時〜（11/2）` : `${h}時〜`);
+  const shortHour = (h) => `${h >= 24 ? h - 24 : h}時〜`;
+  const isOver = (h) => h + 1 <= state.now;
+  const mention = (n) => `<span class="mention">@${n}</span>`;
+  const addLog = (text) => state.log.push({ t: nowLabel(), text });
+  const bucketByKey = (k) => BUCKETS.find((b) => b.key === k);
+
+  function autoBucket(now) {
+    const cur = BUCKETS.find((b) => b.hours.includes(Math.floor(now)));
+    if (cur && cur.hours.filter((h) => h + 1 > now).length >= 3) return cur;
+    return BUCKETS.find((b) => b.hours[0] > now) ?? BUCKETS[2];
+  }
+
+  // entry: { seq, pass, anytime, slots: { [bucketKey]: { hour, now } } }
+  function entryOf(name) {
+    const rec = state.rec;
+    if (!rec.entries.has(name)) rec.entries.set(name, { seq: ++state.seq, pass: false, anytime: false, slots: {} });
+    return rec.entries.get(name);
+  }
+
+  function create() {
+    const game = GAMES[Number(document.getElementById("game").value)];
+    const choice = document.getElementById("bucket").value;
+    const mode = choice === "any" ? "any" : "single";
+    const buckets = mode === "any" ? BUCKETS : [choice === "auto" ? autoBucket(state.now) : bucketByKey(choice)];
+    const openBuckets = buckets.filter((b) => b.hours.some((h) => !isOver(h)));
+    if (openBuckets.length === 0) {
+      state.rec = null;
+      state.log = [{ t: nowLabel(), text: `たろうが /募集 を実行 → ${buckets[0].label}はもう終わっているので、たろうにだけエラーを返す` }];
+      render();
+      return;
+    }
+    state.rec = { game, mode, buckets, entries: new Map(), status: "open", notice: null, cancelNotice: null, ephemeral: null };
+    const label = mode === "any" ? "いつでも" : buckets[0].label;
+    if (mode === "any") {
+      entryOf(HOST).anytime = true;
+      entryOf("けん").slots.night = { hour: 21, now: false };
+      entryOf("はなこ").slots.noon = { hour: 15, now: false };
+      state.log = [{ t: nowLabel(), text: `たろうが /募集 game:${game.name} 時間帯:いつでも を実行。たろうは「いつでもOK」で自動参加` }];
+    } else {
+      const open = buckets[0].hours.filter((h) => !isOver(h));
+      entryOf(HOST).slots[buckets[0].key] = { hour: open[0], now: false };
+      if (open.length >= 2) entryOf("けん").slots[buckets[0].key] = { hour: open[1], now: false };
+      state.log = [{ t: nowLabel(), text: `たろうが /募集 game:${game.name}${choice === "auto" ? ` を実行 → 時間帯は自動で「${label}」` : ` 時間帯:${label} を実行`}。たろうは ${shortHour(open[0])} で自動参加` }];
+    }
+    entryOf("じろう").pass = true;
+    checkReady();
+    render(true);
+  }
+
+  function tally() {
+    const rec = state.rec;
+    const people = [...rec.entries].map(([name, e]) => ({ name, ...e })).sort((a, b) => a.seq - b.seq);
+    const passed = people.filter((p) => p.pass).map((p) => p.name);
+    const anytime = people.filter((p) => p.anytime).map((p) => p.name);
+    let best = 0, ready = null;
+    for (const b of rec.buckets) {
+      for (const h of b.hours) {
+        if (isOver(h)) continue;
+        const avail = people.filter((p) => p.anytime || (p.slots[b.key] && p.slots[b.key].hour <= h));
+        best = Math.max(best, avail.length);
+        if (!ready && avail.length >= rec.game.min) {
+          const cap = rec.game.max ?? Infinity;
+          ready = { bucket: b, hour: h, members: avail.slice(0, cap).map((p) => p.name), reserves: avail.slice(cap).map((p) => p.name) };
+        }
+      }
+    }
+    return { people, passed, anytime, best, ready };
+  }
+
+  function checkReady() {
+    const rec = state.rec;
+    const { ready } = tally();
+    if (ready && !rec.notice) {
+      rec.notice = ready;
+      addLog(`${rec.mode === "any" ? ready.bucket.label + " " : ""}${shortHour(ready.hour)}で${ready.members.length}人そろった → 参加メンバーにメンション（この募集では以後通知しない）`);
+    }
+  }
+
+  function changed(text) {
+    state.rec.ephemeral = null;
+    addLog(text);
+    checkReady();
+    render(true);
+  }
+
+  function pressHour(h) {
+    const e = entryOf(state.me);
+    const key = state.rec.buckets[0].key;
+    e.pass = false;
+    e.slots = { [key]: { hour: h, now: false } };
+    changed(`${state.me}が ${shortHour(h)} を押す → 募集投稿を書き換え`);
+  }
+
+  function pressNow(bucketKey) {
+    const e = entryOf(state.me);
+    e.pass = false;
+    e.slots[bucketKey] = { hour: Math.floor(state.now), now: true };
+    changed(`${state.me}が「今すぐ」を押す → ${shortHour(Math.floor(state.now))}として数える`);
+  }
+
+  function pickSlot(bucketKey, value) {
+    const e = entryOf(state.me);
+    const b = bucketByKey(bucketKey);
+    if (value === "none") {
+      delete e.slots[bucketKey];
+      changed(`${state.me}が「${b.label}は無理」を選ぶ → ${b.label}から外す`);
+      return;
+    }
+    if (value === "now") return pressNow(bucketKey);
+    e.pass = false;
+    e.slots[bucketKey] = { hour: Number(value), now: false };
+    changed(`${state.me}が ${b.label}のメニューで ${shortHour(Number(value))} を選ぶ → 募集投稿を書き換え`);
+  }
+
+  function pressAnytime() {
+    const e = entryOf(state.me);
+    e.anytime = !e.anytime;
+    if (e.anytime) e.pass = false;
+    changed(`${state.me}が「いつでもOK」を${e.anytime ? "オン" : "オフ"}にする`);
+  }
+
+  function pressPass() {
+    const e = entryOf(state.me);
+    e.pass = true; e.anytime = false; e.slots = {};
+    changed(`${state.me}が「今日はパス」を押す → 回答を消してパスに`);
+  }
+
+  function pressGear() {
+    const rec = state.rec;
+    rec.ephemeral = state.me === HOST
+      ? { for: HOST, kind: "manage" }
+      : { for: state.me, kind: "text", text: "募集した人（たろう）だけが操作できます" };
+    addLog(`${state.me}が ⚙ を押す → ${state.me === HOST ? "たろうにだけ「締め切る」「中止」を表示" : `${state.me}にだけ断りを返す`}`);
+    render();
+  }
+
+  function pressClose(kind) {
+    const rec = state.rec;
+    rec.status = kind === "close" ? "closed" : "cancelled";
+    rec.ephemeral = null;
+    if (kind === "cancel") {
+      rec.cancelNotice = tally().people.filter((p) => !p.pass && p.name !== HOST && (p.anytime || Object.keys(p.slots).length)).map((p) => p.name);
+      addLog("たろうが「中止」を押す → ボタンを消し、参加予定だった人にメンション");
+    } else {
+      addLog("たろうが「締め切る」を押す → ボタンを消して結果だけ残す");
+    }
+    render(true);
+  }
+
+  function setNow(h) {
+    state.now = h;
+    const rec = state.rec;
+    addLog(`時刻が ${nowLabel()} になる`);
+    if (rec && rec.status === "open" && rec.buckets.every((b) => b.hours.every(isOver))) {
+      rec.status = "closed";
+      addLog("募集の時間帯が終わったので、定期処理が自動で締め切る");
+    }
+    render();
+  }
+
+  function personChip(p, bucketKey, reserves) {
+    const slot = p.slots[bucketKey];
+    const extras = [];
+    if (slot?.now) extras.push("⚡今すぐ");
+    if (reserves.has(p.name)) extras.push("補欠");
+    return `<span>${mention(p.name)}${extras.length ? ` <span class="tagline">${extras.join(" ")}</span>` : ""}</span>`;
+  }
+
+  function rowsSingle(t, ended, reserves) {
+    const b = state.rec.buckets[0];
+    return b.hours.map((h) => {
+      const here = t.people.filter((p) => !p.pass && p.slots[b.key]?.hour === h);
+      const people = here.length ? here.map((p) => personChip(p, b.key, reserves)).join("") : '<span class="none">－</span>';
+      return `<div class="row ${isOver(h) && !ended ? "over" : ""}"><span class="h">${hourLabel(h)}</span><span class="people">${people}</span></div>`;
+    }).join("");
+  }
+
+  function rowsAny(t, ended, reserves) {
+    const rows = BUCKETS.map((b) => {
+      const allOver = b.hours.every(isOver);
+      const here = t.people.filter((p) => !p.pass && p.slots[b.key]).sort((a, c) => a.slots[b.key].hour - c.slots[b.key].hour);
+      const people = here.length
+        ? here.map((p) => `<span>${personChip(p, b.key, reserves)} <span class="tm">${b.key === "late" ? hourLabel(p.slots[b.key].hour) : shortHour(p.slots[b.key].hour)}</span></span>`).join("")
+        : '<span class="none">－</span>';
+      return `<div class="row ${allOver && !ended ? "over" : ""}"><span class="b">${b.emoji} ${b.label}</span><span class="people">${people}</span></div>`;
+    }).join("");
+    const any = t.anytime.length ? `<div class="row"><span class="b">🙆 いつでも</span><span class="people">${t.anytime.map((n) => `<span>${mention(n)}${reserves.has(n) ? ' <span class="tagline">補欠</span>' : ""}</span>`).join("")}</span></div>` : "";
+    return rows + any;
+  }
+
+  function controlsSingle() {
+    const b = state.rec.buckets[0];
+    const open = b.hours.filter((h) => !isOver(h));
+    const showNow = b.hours.includes(Math.floor(state.now));
+    return `<div class="buttons">
+        ${showNow ? `<button class="dbtn go-ok" type="button" data-now-join="${b.key}">⚡ 今すぐ</button>` : ""}
+        ${open.map((h) => `<button class="dbtn" type="button" data-hour="${h}">${shortHour(h)}</button>`).join("")}
+      </div>
+      <div class="buttons">
+        <button class="dbtn secondary" type="button" data-pass>今日はパス</button>
+        <button class="dbtn secondary" type="button" data-gear aria-label="管理">⚙</button>
+      </div>`;
+  }
+
+  function controlsAny() {
+    const me = state.rec.entries.get(state.me);
+    const selects = BUCKETS.map((b) => {
+      const open = b.hours.filter((h) => !isOver(h));
+      const nowOpt = b.hours.includes(Math.floor(state.now)) ? '<option value="now">⚡ 今すぐ</option>' : "";
+      return `<select class="dselect" data-slot="${b.key}" aria-label="${b.label}なら何時から" ${open.length ? "" : "disabled"}>
+          <option value="" selected disabled>${b.emoji} ${b.label}なら何時から？${open.length ? "" : "（終了）"}</option>
+          ${nowOpt}${open.map((h) => `<option value="${h}">${hourLabel(h)}</option>`).join("")}
+          <option value="none">${b.label}は無理</option>
+        </select>`;
+    }).join("");
+    return `${selects}
+      <div class="buttons">
+        <button class="dbtn go-ok ${me?.anytime ? "on" : ""}" type="button" data-anytime>🙆 いつでもOK</button>
+        <button class="dbtn secondary" type="button" data-pass>今日はパス</button>
+        <button class="dbtn secondary" type="button" data-gear aria-label="管理">⚙</button>
+      </div>`;
+  }
+
+  function boardHtml() {
+    const rec = state.rec;
+    const t = tally();
+    const ended = rec.status !== "open";
+    const reserves = new Set(t.ready?.reserves ?? []);
+    const rows = rec.mode === "any" ? rowsAny(t, ended, reserves) : rowsSingle(t, ended, reserves);
+
+    const cap = rec.game.max ? `・定員${rec.game.max}人` : "";
+    let status;
+    if (t.ready) {
+      const where = rec.mode === "any" ? `${t.ready.bucket.label} ` : "";
+      status = `<div class="status ok">✅ ${where}${shortHour(t.ready.hour)}なら ${t.ready.members.length}人そろう</div>`;
+      if (t.ready.reserves.length) status += `<div class="sub">補欠: ${t.ready.reserves.map(mention).join(" ")}</div>`;
+    } else {
+      status = `<div class="status">あと ${rec.game.min - t.best}人</div>`;
+    }
+    const passed = t.passed.length ? `<div class="sub">パス: ${t.passed.map(mention).join(" ")}</div>` : "";
+    const controls = ended
+      ? `<div class="ended-note">${rec.status === "cancelled" ? "この募集は中止されました" : "この募集は締め切られました"}</div>`
+      : rec.mode === "any" ? controlsAny() : controlsSingle();
+
+    const badge = rec.status === "closed" ? '<span class="badge">締め切り</span>' : rec.status === "cancelled" ? '<span class="badge cancel">中止</span>' : "";
+    const when = rec.mode === "any" ? "いつでも" : `${rec.buckets[0].emoji}${rec.buckets[0].label}`;
+    return `<div class="embed ${ended ? "ended" : t.ready ? "ready" : ""}" id="board">
+        <h2>🎮 ${rec.game.name} やる人？ 11/1(日) ${when}${badge}</h2>
+        <div>募集: ${mention(HOST)}（${rec.game.min}人〜${cap}）</div>
+        <div class="rows">${rows}</div>
+        ${status}${passed}
+        ${controls}
+      </div>`;
+  }
+
+  const botMsg = (inner) => `<div class="msg"><div class="avatar">bot</div><div>
+      <div class="who">ゲーム募集<span class="tag">APP</span><time>${nowLabel()}</time></div>${inner}</div></div>`;
+  const ephemeral = (inner) => botMsg(`<div class="ephemeral">${inner}<div class="note">👁 これはあなただけに表示されています</div></div>`);
+
+  function feedHtml() {
+    const rec = state.rec;
+    if (!rec) {
+      return state.log.length
+        ? ephemeral("指定した時間帯はもう終わっています。別の時間帯か日付を指定してください")
+        : '<div class="none">上の「/募集」で募集を作ってください。</div>';
+    }
+    let html = botMsg(`<div class="cmd">${HOST} が /募集 を使用しました</div>${boardHtml()}`);
+    if (rec.notice) {
+      const n = rec.notice;
+      const where = rec.mode === "any" ? `${n.bucket.label} ` : "";
+      html += botMsg(`<div class="notice">🎮 ${rec.game.name} ${where}${shortHour(n.hour)}で${n.members.length}人そろいました！ ${n.members.map(mention).join(" ")}</div>`);
+    }
+    if (rec.cancelNotice) {
+      html += botMsg(`<div class="notice">${rec.game.name} の募集は中止になりました ${rec.cancelNotice.map(mention).join(" ")}</div>`);
+    }
+    const e = rec.ephemeral;
+    if (e && e.for === state.me) {
+      html += e.kind === "manage"
+        ? ephemeral(`この募集を管理<div class="buttons"><button class="dbtn secondary" type="button" data-close="close">締め切る</button><button class="dbtn danger" type="button" data-close="cancel">中止</button></div>`)
+        : ephemeral(e.text);
+    }
+    return html;
+  }
+
+  function render(flash) {
+    document.getElementById("who").innerHTML = USERS.map((u) =>
+      `<button type="button" data-me="${u}" aria-pressed="${u === state.me}">${u}</button>`).join("");
+    document.getElementById("now").innerHTML = NOWS.map((n) =>
+      `<button type="button" data-time="${n.h}" aria-pressed="${n.h === state.now}">${n.label}</button>`).join("");
+    document.getElementById("feed").innerHTML = feedHtml();
+    if (flash) document.getElementById("board")?.classList.add("flash");
+    document.getElementById("log").innerHTML = state.log.map((l) => `<li><span class="t">${l.t}</span>${l.text}</li>`).join("");
+  }
+
+  document.getElementById("game").innerHTML = GAMES.map((g, i) =>
+    `<option value="${i}">${g.name}（${g.min}人〜${g.max ? `定員${g.max}` : "定員なし"}）</option>`).join("");
+  document.getElementById("bucket").innerHTML = '<option value="any">いつでも</option><option value="auto">省略（自動）</option>' +
+    BUCKETS.map((b) => `<option value="${b.key}">${b.label}</option>`).join("");
+  document.getElementById("create").addEventListener("click", create);
+
+  document.addEventListener("click", (ev) => {
+    const el = ev.target.closest("button");
+    if (!el || el.disabled) return;
+    if (el.dataset.me) { state.me = el.dataset.me; render(); }
+    else if (el.dataset.time) setNow(Number(el.dataset.time));
+    else if (el.dataset.hour) pressHour(Number(el.dataset.hour));
+    else if (el.dataset.nowJoin) pressNow(el.dataset.nowJoin);
+    else if ("anytime" in el.dataset) pressAnytime();
+    else if ("pass" in el.dataset) pressPass();
+    else if ("gear" in el.dataset) pressGear();
+    else if (el.dataset.close) pressClose(el.dataset.close);
+  });
+  document.addEventListener("change", (ev) => {
+    const el = ev.target;
+    if (el.matches?.("select[data-slot]") && el.value) pickSlot(el.dataset.slot, el.value);
+  });
+
+  create();
+</script>
