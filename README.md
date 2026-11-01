@@ -77,7 +77,7 @@ Cloudflare Workers と D1 で動き、無料枠の範囲で常時稼働する。
 
 ### 1. 依存を入れる
 
-パッケージマネージャには pnpm を使う。入っていなければ npm で入れる。どのバージョンを入れても、このリポジトリの中では `package.json` の `packageManager` に書いたバージョンに切り替わる。
+パッケージマネージャには pnpm を使う。入っていなければ npm で入れる。このリポジトリの中では `package.json` の `packageManager` の版に切り替わる。
 
 ```powershell
 npm install -g pnpm@latest
