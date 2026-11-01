@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "game-bot",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "game-bot",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "DISCORD_APP_ID": "REPLACE_WITH_APPLICATION_ID",
+    "DISCORD_PUBLIC_KEY": "REPLACE_WITH_PUBLIC_KEY"
+  }
+}
