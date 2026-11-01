@@ -1,41 +1,64 @@
-// 24 は翌0時。日付をまたいでも同じ募集の中で数えるため、時刻は整数のまま扱う
-export const HOURS = [20, 21, 22, 23, 24] as const;
+import { bucketsOf, isHourOver, type BucketKey, type Scope } from "./buckets.ts";
+import { clockOf } from "./date.ts";
+import type { Recruitment } from "./recruitment.ts";
 
-export type Entry = { userId: string; hour: number | null };
+export type Slot = { hour: number; now: boolean };
 
-export type Tally = {
-  byHour: Map<number, string[]>;
-  passed: string[];
-  participantCount: number;
-  ready: { hour: number; userIds: string[] } | null;
+/** 配列は最初に回答した順に並んでいる前提。passed のときは anytime=false・slots 空 */
+export type Participant = {
+  userId: string;
+  passed: boolean;
+  anytime: boolean;
+  slots: Partial<Record<BucketKey, Slot>>;
 };
 
-export function isValidHour(hour: number): boolean {
-  return HOURS.some((h) => h === hour);
+export type Ready = { bucket: BucketKey; hour: number; members: string[]; reserves: string[] };
+
+export type Tally = { ready: Ready | null; best: number; passed: string[]; anytime: string[] };
+
+/**
+ * 開始時刻が早い人はそれ以降の時刻にも参加できるとみなす。
+ * ただし時間帯をまたいでは数えない（朝から来られる人が夜も空いているとは限らないため）。
+ * clock が null なら過ぎた時刻も数える（締め切り・中止の後も結果を残すため）
+ */
+export function tally(input: {
+  scope: Scope;
+  participants: Participant[];
+  min: number;
+  max: number | null;
+  clock: number | null;
+}): Tally {
+  const { scope, participants, min, max, clock } = input;
+  const active = participants.filter((p) => !p.passed);
+  let best = 0;
+  let ready: Ready | null = null;
+  for (const bucket of bucketsOf(scope)) {
+    for (const hour of bucket.hours) {
+      if (clock !== null && isHourOver(hour, clock)) continue;
+      const available = active.filter((p) => p.anytime || (p.slots[bucket.key]?.hour ?? Infinity) <= hour).map((p) => p.userId);
+      best = Math.max(best, available.length);
+      if (ready === null && available.length >= min) {
+        const cap = max ?? available.length;
+        ready = { bucket: bucket.key, hour, members: available.slice(0, cap), reserves: available.slice(cap) };
+      }
+    }
+  }
+  return {
+    ready,
+    best,
+    passed: participants.filter((p) => p.passed).map((p) => p.userId),
+    anytime: active.filter((p) => p.anytime).map((p) => p.userId),
+  };
 }
 
-export function tally(entries: Entry[], required: number): Tally {
-  const byHour = new Map<number, string[]>();
-  const passed: string[] = [];
-  for (const entry of entries) {
-    if (entry.hour === null) {
-      passed.push(entry.userId);
-      continue;
-    }
-    if (!isValidHour(entry.hour)) continue;
-    const users = byHour.get(entry.hour) ?? [];
-    users.push(entry.userId);
-    byHour.set(entry.hour, users);
-  }
+export function tallyRecruitment(rec: Recruitment, participants: Participant[], now: Date): Tally {
+  const clock = rec.status === "open" ? clockOf(rec.date, now) : null;
+  return tally({ scope: rec.scope, participants, min: rec.min, max: rec.max, clock });
+}
 
-  const available: string[] = [];
-  let ready: Tally["ready"] = null;
-  for (const hour of HOURS) {
-    available.push(...(byHour.get(hour) ?? []));
-    if (ready === null && available.length >= required) {
-      ready = { hour, userIds: [...available] };
-    }
-  }
-
-  return { byHour, passed, participantCount: available.length, ready };
+/** 中止を知らせる相手。パスした人と募集した本人には送らない */
+export function cancelNoticeTargets(rec: { hostId: string }, participants: Participant[]): string[] {
+  return participants
+    .filter((p) => !p.passed && p.userId !== rec.hostId && (p.anytime || Object.keys(p.slots).length > 0))
+    .map((p) => p.userId);
 }

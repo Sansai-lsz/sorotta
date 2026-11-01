@@ -3,108 +3,200 @@ import {
   ComponentType,
   type APIActionRowComponent,
   type APIButtonComponent,
+  type APIComponentInMessageActionRow,
   type APIEmbed,
   type APIInteractionResponseCallbackData,
+  type APISelectMenuOption,
 } from "discord-api-types/v10";
-import { formatDate } from "./date.ts";
-import { HOURS, tally, type Entry } from "./tally.ts";
+import {
+  BUCKETS,
+  bucketOf,
+  hourLabel,
+  isHourOver,
+  nowHourIn,
+  openHours,
+  shortHourLabel,
+  type Bucket,
+} from "./buckets.ts";
+import { encodeCustomId, encodeSelectValue } from "./customId.ts";
+import { clockOf, formatDate } from "./date.ts";
+import type { Recruitment } from "./recruitment.ts";
+import { tally, type Participant, type Ready, type Slot } from "./tally.ts";
 
-export type Recruitment = {
-  id: string;
-  game: string;
-  required: number;
-  date: string;
-  recruiterId: string;
-};
+type ActionRow = APIActionRowComponent<APIComponentInMessageActionRow>;
 
 const BUTTONS_PER_ROW = 5;
-
-export function hourLabel(hour: number): string {
-  return `${hour}時〜`;
-}
+const COLOR_ENDED = 0x99aab5;
+const COLOR_READY = 0x57f287;
+const COLOR_OPEN = 0x5865f2;
 
 function mention(userId: string): string {
   return `<@${userId}>`;
 }
 
-export function joinCustomId(recruitmentId: string, hour: number): string {
-  return `j:${recruitmentId}:${hour}`;
+function mentions(userIds: string[]): string {
+  return userIds.map(mention).join(" ");
 }
 
-export function passCustomId(recruitmentId: string): string {
-  return `p:${recruitmentId}`;
+export function playersLabel(min: number, max: number | null): string {
+  return max === null ? `${min}人〜` : `${min}人〜・定員${max}人`;
 }
 
-export type ButtonAction =
-  | { kind: "join"; recruitmentId: string; hour: number }
-  | { kind: "pass"; recruitmentId: string };
-
-export function parseCustomId(customId: string): ButtonAction | null {
-  const [kind, recruitmentId, hour] = customId.split(":");
-  if (!recruitmentId) return null;
-  if (kind === "p") return { kind: "pass", recruitmentId };
-  if (kind === "j" && hour !== undefined && /^\d+$/.test(hour)) {
-    return { kind: "join", recruitmentId, hour: Number(hour) };
-  }
-  return null;
+/** /game の返事・一覧・自動補完で使う「Apex（3人〜・定員3人）」 */
+export function gameLabel(game: { name: string; min: number; max: number | null }): string {
+  return `${game.name}（${playersLabel(game.min, game.max)}）`;
 }
 
-export function renderBoard(
-  rec: Recruitment,
-  entries: Entry[],
-): APIInteractionResponseCallbackData {
-  const t = tally(entries, rec.required);
+function button(style: ButtonStyle.Primary | ButtonStyle.Secondary | ButtonStyle.Success | ButtonStyle.Danger, label: string, customId: string): APIButtonComponent {
+  return { type: ComponentType.Button, style, label, custom_id: customId };
+}
 
-  const lines = [`募集: ${mention(rec.recruiterId)}（${rec.required}人そろえば開始）`, ""];
-  for (const hour of HOURS) {
-    const users = t.byHour.get(hour) ?? [];
-    lines.push(`**${hourLabel(hour)}**　${users.length > 0 ? users.map(mention).join(" ") : "－"}`);
-  }
-  lines.push("");
-  lines.push(
-    t.ready
-      ? `✅ **${hourLabel(t.ready.hour)}なら ${t.ready.userIds.length}人そろう**`
-      : `あと ${rec.required - t.participantCount}人`,
-  );
-  if (t.passed.length > 0) {
-    lines.push(`パス: ${t.passed.map(mention).join(" ")}`);
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+export function renderBoard(rec: Recruitment, participants: Participant[], now: Date): APIInteractionResponseCallbackData {
+  const ended = rec.status !== "open";
+  const clock = ended ? null : clockOf(rec.date, now);
+  const t = tally({ scope: rec.scope, participants, min: rec.min, max: rec.max, clock });
+  const reserves = new Set(t.ready?.reserves ?? []);
+  const over = (hour: number) => clock !== null && isHourOver(hour, clock);
+  const answered = participants.filter((p) => !p.passed);
+  const scope = rec.scope;
+
+  const chip = (userId: string, slot: Slot | undefined) =>
+    [mention(userId), ...(slot?.now ? ["⚡今すぐ"] : []), ...(reserves.has(userId) ? ["補欠"] : [])].join(" ");
+  const row = (label: string, struck: boolean, people: string[], separator: string) =>
+    `${struck ? `~~${label}~~` : `**${label}**`}　${people.length > 0 ? people.join(separator) : "－"}`;
+
+  const rows =
+    scope === "any"
+      ? BUCKETS.map((b) => {
+          const here = answered
+            .flatMap((p) => {
+              const slot = p.slots[b.key];
+              return slot ? [{ userId: p.userId, slot }] : [];
+            })
+            .sort((x, y) => x.slot.hour - y.slot.hour);
+          const people = here.map(({ userId, slot }) => `${chip(userId, slot)} ${hourLabel(slot.hour, rec.date)}`);
+          return row(`${b.emoji} ${b.label}`, b.hours.every(over), people, "　");
+        })
+      : bucketOf(scope).hours.map((hour) => {
+          const people = answered.flatMap((p) => {
+            const slot = p.slots[scope];
+            return slot?.hour === hour ? [chip(p.userId, slot)] : [];
+          });
+          return row(hourLabel(hour, rec.date), over(hour), people, " ");
+        });
+  if (scope === "any" && t.anytime.length > 0) {
+    rows.push(`**🙆 いつでも**　${t.anytime.map((userId) => chip(userId, undefined)).join(" ")}`);
   }
 
+  const lines = [`募集: ${mention(rec.hostId)}（${playersLabel(rec.min, rec.max)}）`, "", ...rows, ""];
+  if (t.ready) {
+    const where = rec.scope === "any" ? `${bucketOf(t.ready.bucket).label} ` : "";
+    lines.push(`✅ **${where}${shortHourLabel(t.ready.hour)}なら ${t.ready.members.length}人そろう**`);
+    if (t.ready.reserves.length > 0) lines.push(`補欠: ${mentions(t.ready.reserves)}`);
+  } else {
+    lines.push(`あと ${rec.min - t.best}人`);
+  }
+  if (t.passed.length > 0) lines.push(`パス: ${mentions(t.passed)}`);
+  if (ended) lines.push("", rec.status === "cancelled" ? "この募集は中止されました" : "この募集は締め切られました");
+
+  const when = scope === "any" ? "いつでも" : `${bucketOf(scope).emoji}${bucketOf(scope).label}`;
+  const badge = rec.status === "closed" ? " ［締め切り］" : rec.status === "cancelled" ? " ［中止］" : "";
   const embed: APIEmbed = {
-    title: `🎮 ${rec.game} やる人？ ${formatDate(rec.date)}`,
+    title: `🎮 ${rec.game} やる人？ ${formatDate(rec.date)} ${when}${badge}`,
     description: lines.join("\n"),
-    color: t.ready ? 0x57f287 : 0x5865f2,
+    color: ended ? COLOR_ENDED : t.ready ? COLOR_READY : COLOR_OPEN,
   };
 
-  const hourButtons: APIButtonComponent[] = HOURS.map((hour) => ({
-    type: ComponentType.Button,
-    style: ButtonStyle.Primary,
-    label: hourLabel(hour),
-    custom_id: joinCustomId(rec.id, hour),
-  }));
-  const rows: APIActionRowComponent<APIButtonComponent>[] = [];
-  for (let i = 0; i < hourButtons.length; i += BUTTONS_PER_ROW) {
-    rows.push({ type: ComponentType.ActionRow, components: hourButtons.slice(i, i + BUTTONS_PER_ROW) });
-  }
-  rows.push({
-    type: ComponentType.ActionRow,
-    components: [
-      {
-        type: ComponentType.Button,
-        style: ButtonStyle.Secondary,
-        label: "今日はパス",
-        custom_id: passCustomId(rec.id),
-      },
-    ],
-  });
+  const components =
+    clock === null ? [] : scope === "any" ? anyControls(rec, clock) : singleControls(rec, bucketOf(scope), clock);
 
   // 一覧のメンションは名前表示のためだけに使う。押すたびに全員へ通知が飛ばないよう抑止する
-  return { embeds: [embed], components: rows, allowed_mentions: { parse: [] } };
+  return { embeds: [embed], components, allowed_mentions: { parse: [] } };
 }
 
-export function renderReadyNotice(game: string, hour: number, userIds: string[]): APIInteractionResponseCallbackData {
+function footerButtons(rec: Recruitment): APIButtonComponent[] {
+  return [
+    button(ButtonStyle.Secondary, "今日はパス", encodeCustomId({ kind: "pass", recruitmentId: rec.id })),
+    button(ButtonStyle.Secondary, "⚙", encodeCustomId({ kind: "gear", recruitmentId: rec.id })),
+  ];
+}
+
+function singleControls(rec: Recruitment, bucket: Bucket, clock: number): ActionRow[] {
+  const buttons: APIButtonComponent[] = [];
+  if (nowHourIn(bucket, clock) !== null) {
+    buttons.push(button(ButtonStyle.Success, "⚡ 今すぐ", encodeCustomId({ kind: "now", recruitmentId: rec.id, bucket: bucket.key })));
+  }
+  for (const hour of openHours(bucket, clock)) {
+    buttons.push(button(ButtonStyle.Primary, shortHourLabel(hour), encodeCustomId({ kind: "hour", recruitmentId: rec.id, hour })));
+  }
+  return [...chunk(buttons, BUTTONS_PER_ROW), footerButtons(rec)].map((components) => ({
+    type: ComponentType.ActionRow,
+    components,
+  }));
+}
+
+function anyControls(rec: Recruitment, clock: number): ActionRow[] {
+  const selects: ActionRow[] = BUCKETS.map((b) => {
+    const open = openHours(b, clock);
+    const options: APISelectMenuOption[] = [];
+    if (nowHourIn(b, clock) !== null) options.push({ label: "⚡ 今すぐ", value: encodeSelectValue({ kind: "now" }) });
+    for (const hour of open) options.push({ label: hourLabel(hour, rec.date), value: encodeSelectValue({ kind: "hour", hour }) });
+    options.push({ label: `${b.label}は無理`, value: encodeSelectValue({ kind: "none" }) });
+    return {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.StringSelect,
+          custom_id: encodeCustomId({ kind: "select", recruitmentId: rec.id, bucket: b.key }),
+          placeholder: `${b.emoji} ${b.label}なら何時から？${open.length === 0 ? "（終了）" : ""}`,
+          options,
+          min_values: 1,
+          max_values: 1,
+          disabled: open.length === 0,
+        },
+      ],
+    };
+  });
+  const buttons: APIButtonComponent[] = [
+    button(ButtonStyle.Success, "🙆 いつでもOK", encodeCustomId({ kind: "anytime", recruitmentId: rec.id })),
+    ...footerButtons(rec),
+  ];
+  return [...selects, { type: ComponentType.ActionRow, components: buttons }];
+}
+
+export function renderReadyNotice(rec: Recruitment, ready: Ready): APIInteractionResponseCallbackData {
+  const where = rec.scope === "any" ? `${bucketOf(ready.bucket).label} ` : "";
   return {
-    content: `🎮 ${game} ${hourLabel(hour)}で${userIds.length}人そろいました！ ${userIds.map(mention).join(" ")}`,
+    content: `🎮 ${rec.game} ${where}${shortHourLabel(ready.hour)}で${ready.members.length}人そろいました！ ${mentions(ready.members)}`,
+    allowed_mentions: { users: ready.members },
+  };
+}
+
+export function renderCancelNotice(rec: Recruitment, userIds: string[]): APIInteractionResponseCallbackData {
+  return {
+    content: [`${rec.game} の募集は中止になりました`, ...userIds.map(mention)].join(" "),
     allowed_mentions: { users: userIds },
+  };
+}
+
+export function renderManagePanel(rec: Recruitment): APIInteractionResponseCallbackData {
+  return {
+    content: "この募集を管理",
+    components: [
+      {
+        type: ComponentType.ActionRow,
+        components: [
+          button(ButtonStyle.Secondary, "締め切る", encodeCustomId({ kind: "close", recruitmentId: rec.id })),
+          button(ButtonStyle.Danger, "中止", encodeCustomId({ kind: "cancel", recruitmentId: rec.id })),
+        ],
+      },
+    ],
+    allowed_mentions: { parse: [] },
   };
 }

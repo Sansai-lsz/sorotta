@@ -14,5 +14,8 @@
   "vars": {
     "DISCORD_APP_ID": "REPLACE_WITH_APPLICATION_ID",
     "DISCORD_PUBLIC_KEY": "REPLACE_WITH_PUBLIC_KEY"
+  },
+  "secrets": {
+    "required": ["DISCORD_BOT_TOKEN"]
   }
 }

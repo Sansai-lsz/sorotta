@@ -2,6 +2,7 @@ import { ApplicationCommandOptionType, type RESTPutAPIApplicationGuildCommandsJS
 
 export const RECRUIT_COMMAND = "募集";
 export const GAME_COMMAND = "game";
+export const SCOPE_OPTION = "時間帯";
 
 export const commands: RESTPutAPIApplicationGuildCommandsJSONBody = [
   {
@@ -23,8 +24,15 @@ export const commands: RESTPutAPIApplicationGuildCommandsJSONBody = [
           {
             type: ApplicationCommandOptionType.Integer,
             name: "players",
-            description: "何人そろえば遊べるか",
+            description: "最少人数",
             required: true,
+            min_value: 1,
+            max_value: 99,
+          },
+          {
+            type: ApplicationCommandOptionType.Integer,
+            name: "max",
+            description: "定員。省略すると定員なし",
             min_value: 1,
             max_value: 99,
           },
@@ -64,8 +72,20 @@ export const commands: RESTPutAPIApplicationGuildCommandsJSONBody = [
       },
       {
         type: ApplicationCommandOptionType.String,
+        name: SCOPE_OPTION,
+        description: "時間帯。省略すると今日なら今の時刻から決め、ほかの日は夜",
+        choices: [
+          { name: "いつでも", value: "any" },
+          { name: "朝", value: "morning" },
+          { name: "昼", value: "noon" },
+          { name: "夜", value: "night" },
+          { name: "深夜", value: "late" },
+        ],
+      },
+      {
+        type: ApplicationCommandOptionType.String,
         name: "date",
-        description: "日付（例: 11/3、明日）。省略すると今日",
+        description: "日付（例: 11/3、明日）。省略すると今日（0〜5時は前日の深夜扱い）",
       },
     ],
   },
