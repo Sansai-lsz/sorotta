@@ -54,7 +54,11 @@ export function gameLabel(game: { name: string; min: number; max: number | null 
   return `${game.name}（${playersLabel(game.min, game.max)}）`;
 }
 
-function button(style: ButtonStyle.Primary | ButtonStyle.Secondary | ButtonStyle.Success | ButtonStyle.Danger, label: string, customId: string): APIButtonComponent {
+function button(
+  style: ButtonStyle.Primary | ButtonStyle.Secondary | ButtonStyle.Success | ButtonStyle.Danger,
+  label: string,
+  customId: string,
+): APIButtonComponent {
   return { type: ComponentType.Button, style, label, custom_id: customId };
 }
 
@@ -64,7 +68,11 @@ function chunk<T>(items: T[], size: number): T[][] {
   return out;
 }
 
-export function renderBoard(rec: Recruitment, participants: Participant[], now: Date): APIInteractionResponseCallbackData {
+export function renderBoard(
+  rec: Recruitment,
+  participants: Participant[],
+  now: Date,
+): APIInteractionResponseCallbackData {
   const ended = rec.status !== "open";
   const clock = recruitmentClock(rec, now);
   const t = tallyRecruitment(rec, participants, now);
@@ -147,10 +155,18 @@ function footerButtons(rec: Recruitment): APIButtonComponent[] {
 function singleControls(rec: Recruitment, bucket: Bucket, clock: number): ActionRow[] {
   const buttons: APIButtonComponent[] = [];
   if (nowHourIn(bucket, clock) !== null) {
-    buttons.push(button(ButtonStyle.Success, "⚡ 今すぐ", encodeCustomId({ kind: "now", recruitmentId: rec.id, bucket: bucket.key })));
+    buttons.push(
+      button(
+        ButtonStyle.Success,
+        "⚡ 今すぐ",
+        encodeCustomId({ kind: "now", recruitmentId: rec.id, bucket: bucket.key }),
+      ),
+    );
   }
   for (const hour of openHours(bucket, clock)) {
-    buttons.push(button(ButtonStyle.Primary, shortHourLabel(hour), encodeCustomId({ kind: "hour", recruitmentId: rec.id, hour })));
+    buttons.push(
+      button(ButtonStyle.Primary, shortHourLabel(hour), encodeCustomId({ kind: "hour", recruitmentId: rec.id, hour })),
+    );
   }
   return [...chunk(buttons, BUTTONS_PER_ROW), footerButtons(rec)].map((components) => ({
     type: ComponentType.ActionRow,
@@ -163,7 +179,8 @@ function anyControls(rec: Recruitment, clock: number): ActionRow[] {
     const open = openHours(b, clock);
     const options: APISelectMenuOption[] = [];
     if (nowHourIn(b, clock) !== null) options.push({ label: "⚡ 今すぐ", value: encodeSelectValue({ kind: "now" }) });
-    for (const hour of open) options.push({ label: hourLabel(hour, rec.date), value: encodeSelectValue({ kind: "hour", hour }) });
+    for (const hour of open)
+      options.push({ label: hourLabel(hour, rec.date), value: encodeSelectValue({ kind: "hour", hour }) });
     options.push({ label: `${b.label}は無理`, value: encodeSelectValue({ kind: "none" }) });
     return {
       type: ComponentType.ActionRow,
@@ -244,5 +261,9 @@ export function withRoleMention(
 ): APIInteractionResponseCallbackData {
   if (roleId === null) return board;
   // 盤面の書き換えは content を送らないので、このメンションは最初の 1 回だけ届き、本文には残り続ける
-  return { ...board, content: `<@&${roleId}> ${game} の募集が出ました`, allowed_mentions: { parse: [], roles: [roleId] } };
+  return {
+    ...board,
+    content: `<@&${roleId}> ${game} の募集が出ました`,
+    allowed_mentions: { parse: [], roles: [roleId] },
+  };
 }

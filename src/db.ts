@@ -140,7 +140,9 @@ const WHILE_OPEN = "EXISTS (SELECT 1 FROM recruitments WHERE id = ? AND status =
 
 function answerStatements(db: D1Database, recruitmentId: string, userId: string, op: AnswerOp): D1PreparedStatement[] {
   const ensure = db
-    .prepare(`INSERT INTO participants (recruitment_id, user_id) SELECT ?, ? WHERE ${WHILE_OPEN} ON CONFLICT DO NOTHING`)
+    .prepare(
+      `INSERT INTO participants (recruitment_id, user_id) SELECT ?, ? WHERE ${WHILE_OPEN} ON CONFLICT DO NOTHING`,
+    )
     .bind(recruitmentId, userId, recruitmentId);
   const updateParticipant = (set: string) =>
     db
@@ -187,7 +189,19 @@ export async function createRecruitment(db: D1Database, rec: Recruitment, hostJo
       .prepare(
         "INSERT INTO recruitments (id, guild_id, channel_id, message_id, game, required, max_players, date, scope, recruiter_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       )
-      .bind(rec.id, rec.guildId, rec.channelId, rec.messageId, rec.game, rec.min, rec.max, rec.date, rec.scope, rec.hostId, rec.status),
+      .bind(
+        rec.id,
+        rec.guildId,
+        rec.channelId,
+        rec.messageId,
+        rec.game,
+        rec.min,
+        rec.max,
+        rec.date,
+        rec.scope,
+        rec.hostId,
+        rec.status,
+      ),
     ...answerStatements(db, rec.id, rec.hostId, hostJoin),
   ]);
 }
@@ -225,7 +239,10 @@ export type Snapshot = { rec: Recruitment; participants: Participant[] };
 
 // D1 は batch を 1 つのトランザクションで実行するので、募集と参加者が同じ時点の状態になる
 export async function readSnapshot(db: D1Database, recruitmentId: string): Promise<Snapshot | null> {
-  const results = await db.batch<Row>([recruitmentStatement(db, recruitmentId), ...participantsStatements(db, recruitmentId)]);
+  const results = await db.batch<Row>([
+    recruitmentStatement(db, recruitmentId),
+    ...participantsStatements(db, recruitmentId),
+  ]);
   const row = rowsAt(results, 0)[0];
   if (!row) return null;
   return { rec: parseRecruitment(row), participants: parseParticipants(rowsAt(results, 1), rowsAt(results, 2)) };

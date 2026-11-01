@@ -164,7 +164,8 @@ async function handleGameCommand(
     }
     case "list": {
       const games = await listGames(env.DB, guildId);
-      if (games.length === 0) return reply("登録済みのゲームはありません。/game add で登録できます", { ephemeral: true });
+      if (games.length === 0)
+        return reply("登録済みのゲームはありません。/game add で登録できます", { ephemeral: true });
       return reply(games.map((g) => `・${gameLabel(g)}${roleSuffix(g.notifyRoleId)}`).join("\n"), { ephemeral: true });
     }
     case "remove": {
@@ -202,7 +203,10 @@ async function handleRecruitCommand(
   const now = new Date();
   const dateInput = stringOption(options, "date");
   const date = parseDateInput(dateInput, now);
-  if (!date) return reply(`日付「${dateInput}」を読み取れませんでした。11/3 や 明日 の形で指定してください`, { ephemeral: true });
+  if (!date)
+    return reply(`日付「${dateInput}」を読み取れませんでした。11/3 や 明日 の形で指定してください`, {
+      ephemeral: true,
+    });
   const plan = planRecruitment({ date, scope: scopeInput }, now);
   const host = plan.ok ? hostJoin(plan.scope, plan.date, now) : null;
   if (!plan.ok || !host) {
@@ -283,7 +287,10 @@ function focusedValue(options: Option[] | undefined): string | undefined {
   return undefined;
 }
 
-async function handleAutocomplete(interaction: APIApplicationCommandAutocompleteInteraction, env: Env): Promise<Response> {
+async function handleAutocomplete(
+  interaction: APIApplicationCommandAutocompleteInteraction,
+  env: Env,
+): Promise<Response> {
   const guildId = interaction.guild_id;
   const games = guildId ? await searchGames(env.DB, guildId, focusedValue(interaction.data.options) ?? "") : [];
   return respond({
@@ -353,7 +360,10 @@ async function finishFromPanel(
   const rec = await getRecruitment(env.DB, recruitmentId);
   if (!rec || rec.hostId !== userId) return;
   if (!(await finishRecruitment(env.DB, rec.id, status))) {
-    await editOriginal(env.DISCORD_APP_ID, interaction.token, { content: "この募集はもう終わっています", components: [] });
+    await editOriginal(env.DISCORD_APP_ID, interaction.token, {
+      content: "この募集はもう終わっています",
+      components: [],
+    });
     return;
   }
   const board = await publishEndedBoard(env, rec.id, new Date());
@@ -431,14 +441,26 @@ async function handleComponent(
         env,
         interaction,
         "finishFromPanel",
-        finishFromPanel(interaction, env, action.recruitmentId, userId, action.kind === "close" ? "closed" : "cancelled"),
+        finishFromPanel(
+          interaction,
+          env,
+          action.recruitmentId,
+          userId,
+          action.kind === "close" ? "closed" : "cancelled",
+        ),
       );
       return respond({ type: InteractionResponseType.DeferredMessageUpdate });
     default: {
       const answer = toAnswerAction(action, interaction);
       if (!answer) return reply(UNUSABLE, { ephemeral: true });
       // D1 の読み書きと再描画が 3 秒の応答期限に収まらないことがあるので、先に受け付けだけ返す
-      runComponentTask(ctx, env, interaction, "updateBoard", updateBoard(interaction, env, action.recruitmentId, userId, answer));
+      runComponentTask(
+        ctx,
+        env,
+        interaction,
+        "updateBoard",
+        updateBoard(interaction, env, action.recruitmentId, userId, answer),
+      );
       return respond({ type: InteractionResponseType.DeferredMessageUpdate });
     }
   }
@@ -476,7 +498,8 @@ export default {
       case InteractionType.Ping:
         return respond({ type: InteractionResponseType.Pong });
       case InteractionType.ApplicationCommand:
-        if (interaction.data.type !== ApplicationCommandType.ChatInput) return reply("未対応のコマンドです", { ephemeral: true });
+        if (interaction.data.type !== ApplicationCommandType.ChatInput)
+          return reply("未対応のコマンドです", { ephemeral: true });
         return handleCommand(interaction as APIChatInputApplicationCommandInteraction, env, ctx);
       case InteractionType.ApplicationCommandAutocomplete:
         return handleAutocomplete(interaction, env);

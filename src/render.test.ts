@@ -32,7 +32,12 @@ const base: Recruitment = {
 const anyRec: Recruitment = { ...base, scope: "any" };
 const lateRec: Recruitment = { ...base, scope: "late" };
 
-const at = (userId: string, slots: ActiveParticipant["slots"]): Participant => ({ userId, passed: false, anytime: false, slots });
+const at = (userId: string, slots: ActiveParticipant["slots"]): Participant => ({
+  userId,
+  passed: false,
+  anytime: false,
+  slots,
+});
 const night = (hour: number, now = false) => ({ night: { hour, now } });
 
 function descriptionOf(rec: Recruitment, participants: Participant[], now: Date): string {
@@ -46,7 +51,13 @@ function rowsOf(rec: Recruitment, participants: Participant[], now: Date) {
 
 function labelsOf(rec: Recruitment, participants: Participant[], now: Date): string[][] {
   return rowsOf(rec, participants, now).map((row) =>
-    row.map((c) => (c.type === ComponentType.Button && "label" in c ? (c.label ?? "") : c.type === ComponentType.StringSelect ? (c.placeholder ?? "") : "")),
+    row.map((c) =>
+      c.type === ComponentType.Button && "label" in c
+        ? (c.label ?? "")
+        : c.type === ComponentType.StringSelect
+          ? (c.placeholder ?? "")
+          : "",
+    ),
   );
 }
 
@@ -110,17 +121,13 @@ describe("renderBoard（時間帯を 1 つ指定した募集）", () => {
   it("そろえば時間帯名なしで最初にそろう時刻を出す", () => {
     const description = descriptionOf(base, [at("a", night(20)), at("b", night(21)), at("c", night(22))], evening);
     expect(description).toContain("✅ **22時〜なら 3人そろう**");
-    expect(renderBoard(base, [at("a", night(20)), at("b", night(21)), at("c", night(22))], evening).embeds?.[0]?.color).toBe(
-      0x57f287,
-    );
+    expect(
+      renderBoard(base, [at("a", night(20)), at("b", night(21)), at("c", night(22))], evening).embeds?.[0]?.color,
+    ).toBe(0x57f287);
   });
 
   it("そろっていなければ残り人数を出し、パスした人も並べる", () => {
-    const description = descriptionOf(
-      base,
-      [at("a", night(21)), { userId: "d", passed: true }],
-      evening,
-    );
+    const description = descriptionOf(base, [at("a", night(21)), { userId: "d", passed: true }], evening);
     expect(description).toContain("あと 2人");
     expect(description).toContain("パス: <@d>");
   });
@@ -203,7 +210,11 @@ describe("renderBoard（終わった募集）", () => {
   const after = jst("2026-11-02T07:00:00");
 
   it("締め切ったらバッジを付け、ボタンを消し、通知した時刻の結果を残す", () => {
-    const board = renderBoard({ ...base, status: "closed", notifiedSlot: { bucket: "night", hour: 20 } }, participants, after);
+    const board = renderBoard(
+      { ...base, status: "closed", notifiedSlot: { bucket: "night", hour: 20 } },
+      participants,
+      after,
+    );
     expect(board.embeds?.[0]?.title).toBe("🎮 Apex やる人？ 11/1(日) 🌙夜 ［締め切り］");
     expect(board.embeds?.[0]?.description).toContain("✅ **20時〜なら 3人そろう**");
     expect(board.embeds?.[0]?.description).toContain("**18時〜**　<@a>");
