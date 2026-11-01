@@ -43,7 +43,15 @@ import {
   respond,
 } from "./discord.ts";
 import type { Recruitment } from "./recruitment.ts";
-import { endedNotice, gameLabel, renderBoard, renderCancelNotice, renderManagePanel, renderReadyNotice } from "./render.ts";
+import {
+  endedNotice,
+  gameLabel,
+  renderBoard,
+  renderCancelNotice,
+  renderFinishResult,
+  renderManagePanel,
+  renderReadyNotice,
+} from "./render.ts";
 import { cancelNoticeTargets, tallyRecruitment, type Participant } from "./tally.ts";
 import { verifySignature } from "./verify.ts";
 
@@ -74,10 +82,25 @@ function userIdOf(interaction: { member?: { user: { id: string } }; user?: { id:
   return interaction.member?.user.id ?? interaction.user?.id;
 }
 
-function runInBackground(ctx: ExecutionContext, label: string, task: Promise<void>): void {
+function runInBackground(ctx: ExecutionContext, label: string, task: Promise<unknown>): void {
   ctx.waitUntil(
     task.catch((err: unknown) => {
       console.error(`${label} failed`, err);
+    }),
+  );
+}
+
+function runComponentTask(
+  ctx: ExecutionContext,
+  env: Env,
+  interaction: APIMessageComponentInteraction,
+  label: string,
+  task: Promise<void>,
+): void {
+  ctx.waitUntil(
+    task.catch(async (err: unknown) => {
+      console.error(`${label} failed`, err);
+      await followUp(env.DISCORD_APP_ID, interaction.token, ephemeralMessage("処理に失敗しました"));
     }),
   );
 }
@@ -183,11 +206,13 @@ async function handleRecruitCommand(
   runInBackground(
     ctx,
     "afterRecruit",
-    (async () => {
-      const messageId = await getOriginalMessageId(env.DISCORD_APP_ID, interaction.token);
-      if (messageId) await saveMessageId(env.DB, rec.id, messageId);
-      await notifyIfReady(env, interaction.token, snapshot.rec, snapshot.participants, now);
-    })(),
+    Promise.all([
+      (async () => {
+        const messageId = await getOriginalMessageId(env.DISCORD_APP_ID, interaction.token);
+        if (messageId) await saveMessageId(env.DB, rec.id, messageId);
+      })(),
+      notifyIfReady(env, interaction.token, snapshot.rec, snapshot.participants, now),
+    ]),
   );
   return respond({
     type: InteractionResponseType.ChannelMessageWithSource,
@@ -273,6 +298,17 @@ async function updateBoard(
   await notifyIfReady(env, interaction.token, snapshot.rec, snapshot.participants, now);
 }
 
+async function publishEndedBoard(env: Env, recruitmentId: string, now: Date): Promise<boolean> {
+  const snapshot = await readSnapshot(env.DB, recruitmentId);
+  if (!snapshot) return false;
+  const { rec, participants } = snapshot;
+  if (!rec.messageId) {
+    console.error(`recruitment ${rec.id} has no message_id; board was not updated`);
+    return false;
+  }
+  return editChannelMessage(env.DISCORD_BOT_TOKEN, rec.channelId, rec.messageId, renderBoard(rec, participants, now));
+}
+
 async function finishFromPanel(
   interaction: APIMessageComponentInteraction,
   env: Env,
@@ -286,27 +322,16 @@ async function finishFromPanel(
     await editOriginal(env.DISCORD_APP_ID, interaction.token, { content: "この募集はもう終わっています", components: [] });
     return;
   }
-  const finished: Recruitment = { ...rec, status };
-  const participants = await listParticipants(env.DB, rec.id);
-  if (finished.messageId) {
-    await editChannelMessage(
-      env.DISCORD_BOT_TOKEN,
-      finished.channelId,
-      finished.messageId,
-      renderBoard(finished, participants, new Date()),
-    );
-  } else {
-    console.error(`recruitment ${rec.id} has no message_id; board was not updated`);
-  }
+  const board = await publishEndedBoard(env, rec.id, new Date());
+  let notice = true;
   if (status === "cancelled") {
-    await createChannelMessage(
-      env.DISCORD_BOT_TOKEN,
-      rec.channelId,
-      renderCancelNotice(rec, cancelNoticeTargets(rec, participants)),
-    );
+    const targets = cancelNoticeTargets(rec, await listParticipants(env.DB, rec.id));
+    if (targets.length > 0) {
+      notice = await createChannelMessage(env.DISCORD_BOT_TOKEN, rec.channelId, renderCancelNotice(rec, targets));
+    }
   }
   await editOriginal(env.DISCORD_APP_ID, interaction.token, {
-    content: status === "closed" ? "締め切りました" : "中止しました",
+    content: renderFinishResult(status, { board, notice }),
     components: [],
   });
 }
@@ -367,8 +392,10 @@ async function handleComponent(
       return openManagePanel(interaction, env, ctx, action.recruitmentId, userId);
     case "close":
     case "cancel":
-      runInBackground(
+      runComponentTask(
         ctx,
+        env,
+        interaction,
         "finishFromPanel",
         finishFromPanel(interaction, env, action.recruitmentId, userId, action.kind === "close" ? "closed" : "cancelled"),
       );
@@ -377,7 +404,7 @@ async function handleComponent(
       const answer = toAnswerAction(action, interaction);
       if (!answer) return reply(UNUSABLE, { ephemeral: true });
       // D1 の読み書きと再描画が 3 秒の応答期限に収まらないことがあるので、先に受け付けだけ返す
-      runInBackground(ctx, "updateBoard", updateBoard(interaction, env, action.recruitmentId, userId, answer));
+      runComponentTask(ctx, env, interaction, "updateBoard", updateBoard(interaction, env, action.recruitmentId, userId, answer));
       return respond({ type: InteractionResponseType.DeferredMessageUpdate });
     }
   }
@@ -385,25 +412,18 @@ async function handleComponent(
 
 async function closeExpired(env: Env, now: Date): Promise<void> {
   const recs = await listOpenRecruitmentsUntil(env.DB, gameToday(now));
+  const failed: string[] = [];
   for (const rec of recs) {
     if (!isScopeOver(rec.scope, hoursSinceDateStart(rec.date, now))) continue;
     try {
       if (!(await finishRecruitment(env.DB, rec.id, "closed"))) continue;
-      if (!rec.messageId) {
-        console.error(`recruitment ${rec.id} has no message_id; board was not updated`);
-        continue;
-      }
-      const participants = await listParticipants(env.DB, rec.id);
-      await editChannelMessage(
-        env.DISCORD_BOT_TOKEN,
-        rec.channelId,
-        rec.messageId,
-        renderBoard({ ...rec, status: "closed" }, participants, now),
-      );
+      if (!(await publishEndedBoard(env, rec.id, now))) failed.push(rec.id);
     } catch (err: unknown) {
       console.error(`closeExpired ${rec.id} failed`, err);
+      failed.push(rec.id);
     }
   }
+  if (failed.length > 0) throw new Error(`closeExpired failed for ${failed.join(", ")}`);
 }
 
 export default {
@@ -433,7 +453,7 @@ export default {
     }
   },
 
-  async scheduled(controller, env, ctx): Promise<void> {
-    runInBackground(ctx, "closeExpired", closeExpired(env, new Date(controller.scheduledTime)));
+  async scheduled(controller, env): Promise<void> {
+    await closeExpired(env, new Date(controller.scheduledTime));
   },
 } satisfies ExportedHandler<Env>;

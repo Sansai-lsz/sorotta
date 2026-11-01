@@ -206,6 +206,21 @@ export function endedNotice(status: "closed" | "cancelled"): string {
   return status === "closed" ? "この募集は締め切られています" : "この募集は中止されています";
 }
 
+export function renderFinishResult(
+  status: "closed" | "cancelled",
+  delivered: { board: boolean; notice: boolean },
+): string {
+  const done = status === "closed" ? "締め切りました" : "中止しました";
+  if (delivered.board && delivered.notice) return done;
+  const problem =
+    !delivered.board && !delivered.notice
+      ? "募集の投稿を書き換えられず、中止の通知も送れませんでした"
+      : !delivered.board
+        ? "募集の投稿を書き換えられませんでした"
+        : "中止の通知を送れませんでした";
+  return `${done}。ただし${problem}（bot の権限を確認してください）`;
+}
+
 export function renderManagePanel(rec: Recruitment): APIInteractionResponseCallbackData {
   return {
     content: "この募集を管理",

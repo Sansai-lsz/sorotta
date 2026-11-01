@@ -6,6 +6,7 @@ import {
   gameLabel,
   renderBoard,
   renderCancelNotice,
+  renderFinishResult,
   renderManagePanel,
   renderReadyNotice,
 } from "./render.ts";
@@ -275,6 +276,28 @@ describe("renderManagePanel", () => {
         ],
       },
     ]);
+  });
+});
+
+describe("renderFinishResult", () => {
+  it("投稿の書き換えと通知に成功すればそのまま知らせる", () => {
+    expect(renderFinishResult("closed", { board: true, notice: true })).toBe("締め切りました");
+    expect(renderFinishResult("cancelled", { board: true, notice: true })).toBe("中止しました");
+  });
+
+  it("投稿を書き換えられなければ、状態は変わったことと権限の確認を知らせる", () => {
+    expect(renderFinishResult("closed", { board: false, notice: true })).toBe(
+      "締め切りました。ただし募集の投稿を書き換えられませんでした（bot の権限を確認してください）",
+    );
+  });
+
+  it("中止の通知を送れなければそれを知らせる", () => {
+    expect(renderFinishResult("cancelled", { board: true, notice: false })).toBe(
+      "中止しました。ただし中止の通知を送れませんでした（bot の権限を確認してください）",
+    );
+    expect(renderFinishResult("cancelled", { board: false, notice: false })).toBe(
+      "中止しました。ただし募集の投稿を書き換えられず、中止の通知も送れませんでした（bot の権限を確認してください）",
+    );
   });
 });
 
