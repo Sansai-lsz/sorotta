@@ -11,7 +11,7 @@ import {
   type APIInteraction,
   type APIMessageComponentInteraction,
 } from "discord-api-types/v10";
-import { resolveAnswer, type AnswerAction, type AnswerOp } from "./answer.ts";
+import { resolveAnswer, type AnswerAction, type AnswerOp, type AnswerResult } from "./answer.ts";
 import { bucketOf, isScope, isScopeOver, openHours, planRecruitment, type Scope } from "./buckets.ts";
 import { GAME_COMMAND, RECRUIT_COMMAND, SCOPE_OPTION } from "./commands.ts";
 import { parseCustomId, parseSelectValue, type ComponentAction } from "./customId.ts";
@@ -27,6 +27,7 @@ import {
   listOpenRecruitmentsUntil,
   listParticipants,
   markNotified,
+  readSnapshot,
   saveMessageId,
   searchGames,
   upsertGame,
@@ -42,8 +43,8 @@ import {
   respond,
 } from "./discord.ts";
 import type { Recruitment } from "./recruitment.ts";
-import { gameLabel, renderBoard, renderCancelNotice, renderManagePanel, renderReadyNotice } from "./render.ts";
-import { cancelNoticeTargets, tallyRecruitment, type ActiveParticipant, type Participant } from "./tally.ts";
+import { endedNotice, gameLabel, renderBoard, renderCancelNotice, renderManagePanel, renderReadyNotice } from "./render.ts";
+import { cancelNoticeTargets, tallyRecruitment, type Participant } from "./tally.ts";
 import { verifySignature } from "./verify.ts";
 
 type Option = APIApplicationCommandInteractionDataOption;
@@ -127,16 +128,10 @@ async function handleGameCommand(
   }
 }
 
-function hostJoin(scope: Scope, date: string, now: Date): { op: AnswerOp; participant: Omit<ActiveParticipant, "userId"> } | null {
-  if (scope === "any") {
-    return { op: { kind: "toggleAnytime" }, participant: { passed: false, anytime: true, slots: {} } };
-  }
+function hostJoin(scope: Scope, date: string, now: Date): AnswerOp | null {
+  if (scope === "any") return { kind: "toggleAnytime" };
   const hour = openHours(bucketOf(scope), hoursSinceDateStart(date, now))[0];
-  if (hour === undefined) return null;
-  return {
-    op: { kind: "slot", bucket: scope, hour, now: false },
-    participant: { passed: false, anytime: false, slots: { [scope]: { hour, now: false } } },
-  };
+  return hour === undefined ? null : { kind: "slot", bucket: scope, hour, now: false };
 }
 
 async function handleRecruitCommand(
@@ -181,8 +176,9 @@ async function handleRecruitCommand(
     status: "open",
     notifiedSlot: null,
   };
-  await createRecruitment(env.DB, rec, host.op);
-  const participants: Participant[] = [{ userId: hostId, ...host.participant }];
+  await createRecruitment(env.DB, rec, host);
+  const snapshot = await readSnapshot(env.DB, rec.id);
+  if (!snapshot) return reply("募集を作れませんでした", { ephemeral: true });
 
   runInBackground(
     ctx,
@@ -190,10 +186,13 @@ async function handleRecruitCommand(
     (async () => {
       const messageId = await getOriginalMessageId(env.DISCORD_APP_ID, interaction.token);
       if (messageId) await saveMessageId(env.DB, rec.id, messageId);
-      await notifyIfReady(env, interaction.token, rec, participants, now);
+      await notifyIfReady(env, interaction.token, snapshot.rec, snapshot.participants, now);
     })(),
   );
-  return respond({ type: InteractionResponseType.ChannelMessageWithSource, data: renderBoard(rec, participants, now) });
+  return respond({
+    type: InteractionResponseType.ChannelMessageWithSource,
+    data: renderBoard(snapshot.rec, snapshot.participants, now),
+  });
 }
 
 async function handleCommand(
@@ -242,23 +241,36 @@ async function updateBoard(
   action: AnswerAction,
 ): Promise<void> {
   const rec = await getRecruitment(env.DB, recruitmentId);
-  if (!rec) return;
+  if (!rec) {
+    await followUp(env.DISCORD_APP_ID, interaction.token, ephemeralMessage(UNUSABLE));
+    return;
+  }
   if (rec.messageId === null) await saveMessageId(env.DB, rec.id, interaction.message.id);
   const now = new Date();
 
-  const refuse = async (message: string) => {
-    const participants = await listParticipants(env.DB, rec.id);
-    await editOriginal(env.DISCORD_APP_ID, interaction.token, renderBoard(rec, participants, now));
-    await followUp(env.DISCORD_APP_ID, interaction.token, ephemeralMessage(message));
-  };
-  if (rec.status !== "open") return refuse("この募集は締め切られています");
-  const result = resolveAnswer(action, rec, hoursSinceDateStart(rec.date, now));
-  if (!result.ok) return refuse(result.message);
+  const result: AnswerResult =
+    rec.status === "open"
+      ? resolveAnswer(action, rec, hoursSinceDateStart(rec.date, now))
+      : { ok: false, message: endedNotice(rec.status) };
+  if (result.ok) await applyAnswer(env.DB, rec.id, userId, result.op);
 
-  await applyAnswer(env.DB, rec.id, userId, result.op);
-  const participants = await listParticipants(env.DB, rec.id);
-  await editOriginal(env.DISCORD_APP_ID, interaction.token, renderBoard(rec, participants, now));
-  await notifyIfReady(env, interaction.token, rec, participants, now);
+  const snapshot = await readSnapshot(env.DB, rec.id);
+  if (!snapshot) {
+    await followUp(env.DISCORD_APP_ID, interaction.token, ephemeralMessage(UNUSABLE));
+    return;
+  }
+  await editOriginal(env.DISCORD_APP_ID, interaction.token, renderBoard(snapshot.rec, snapshot.participants, now));
+
+  const refusal = !result.ok
+    ? result.message
+    : snapshot.rec.status !== "open"
+      ? endedNotice(snapshot.rec.status)
+      : null;
+  if (refusal !== null) {
+    await followUp(env.DISCORD_APP_ID, interaction.token, ephemeralMessage(refusal));
+    return;
+  }
+  await notifyIfReady(env, interaction.token, snapshot.rec, snapshot.participants, now);
 }
 
 async function finishFromPanel(
@@ -299,9 +311,18 @@ async function finishFromPanel(
   });
 }
 
-async function openManagePanel(env: Env, recruitmentId: string, userId: string): Promise<Response> {
+async function openManagePanel(
+  interaction: APIMessageComponentInteraction,
+  env: Env,
+  ctx: ExecutionContext,
+  recruitmentId: string,
+  userId: string,
+): Promise<Response> {
   const rec = await getRecruitment(env.DB, recruitmentId);
   if (!rec) return reply(UNUSABLE, { ephemeral: true });
+  if (rec.messageId === null) {
+    runInBackground(ctx, "saveMessageId", saveMessageId(env.DB, rec.id, interaction.message.id));
+  }
   if (rec.status !== "open") return reply("この募集はもう終わっています", { ephemeral: true });
   if (rec.hostId !== userId) return reply(`募集した人（<@${rec.hostId}>）だけが操作できます`, { ephemeral: true });
   return respond({
@@ -343,7 +364,7 @@ async function handleComponent(
 
   switch (action.kind) {
     case "gear":
-      return openManagePanel(env, action.recruitmentId, userId);
+      return openManagePanel(interaction, env, ctx, action.recruitmentId, userId);
     case "close":
     case "cancel":
       runInBackground(

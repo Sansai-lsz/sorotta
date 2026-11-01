@@ -202,6 +202,10 @@ export function renderCancelNotice(rec: Recruitment, userIds: string[]): APIInte
   };
 }
 
+export function endedNotice(status: "closed" | "cancelled"): string {
+  return status === "closed" ? "この募集は締め切られています" : "この募集は中止されています";
+}
+
 export function renderManagePanel(rec: Recruitment): APIInteractionResponseCallbackData {
   return {
     content: "この募集を管理",

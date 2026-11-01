@@ -2,6 +2,7 @@ import { ComponentType } from "discord-api-types/v10";
 import { describe, expect, it } from "vitest";
 import type { Recruitment } from "./recruitment.ts";
 import {
+  endedNotice,
   gameLabel,
   renderBoard,
   renderCancelNotice,
@@ -274,6 +275,13 @@ describe("renderManagePanel", () => {
         ],
       },
     ]);
+  });
+});
+
+describe("endedNotice", () => {
+  it("締め切りと中止で断りの文言を変える", () => {
+    expect(endedNotice("closed")).toBe("この募集は締め切られています");
+    expect(endedNotice("cancelled")).toBe("この募集は中止されています");
   });
 });
 

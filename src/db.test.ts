@@ -10,6 +10,7 @@ import {
   getRecruitment,
   listParticipants,
   markNotified,
+  readSnapshot,
 } from "./db.ts";
 import type { Recruitment } from "./recruitment.ts";
 
@@ -159,6 +160,33 @@ describe("db", () => {
       anytime: false,
       slots: { night: { hour: 21, now: false } },
     });
+  });
+
+  it.each([
+    { kind: "slot", bucket: "night", hour: 21, now: false },
+    { kind: "clear", bucket: "noon" },
+    { kind: "toggleAnytime" },
+    { kind: "pass" },
+  ] as const)("締め切った後の回答 $kind は書き込まない", async (op) => {
+    await applyAnswer(db, rec.id, "a", { kind: "slot", bucket: "noon", hour: 13, now: false });
+    const before = await listParticipants(db, rec.id);
+    await finishRecruitment(db, rec.id, "closed");
+    await applyAnswer(db, rec.id, "a", op);
+    await applyAnswer(db, rec.id, "b", op);
+    expect(await listParticipants(db, rec.id)).toEqual(before);
+  });
+
+  it("募集と参加者をまとめて読む", async () => {
+    await applyAnswer(db, rec.id, "a", { kind: "pass" });
+    await finishRecruitment(db, rec.id, "cancelled");
+    expect(await readSnapshot(db, rec.id)).toEqual({
+      rec: { ...rec, status: "cancelled" },
+      participants: [
+        { userId: "host", passed: false, anytime: true, slots: {} },
+        { userId: "a", passed: true },
+      ],
+    });
+    expect(await readSnapshot(db, "999")).toBeNull();
   });
 
   it("募集を終えられるのは 1 回だけ", async () => {
