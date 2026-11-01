@@ -3,16 +3,16 @@ import { isBucketKey, isScope, type BucketKey } from "./buckets.ts";
 import { isRecruitmentStatus, type ReadySlot, type Recruitment } from "./recruitment.ts";
 import type { Participant, Slot } from "./tally.ts";
 
-export type Game = { name: string; min: number; max: number | null };
+export type Game = { name: string; min: number; max: number | null; notifyRoleId: string | null };
 
-const GAME_COLUMNS = "name, required AS min, max_players AS max";
+const GAME_COLUMNS = "name, required AS min, max_players AS max, notify_role_id AS notifyRoleId";
 
 export async function upsertGame(db: D1Database, guildId: string, game: Game): Promise<void> {
   await db
     .prepare(
-      "INSERT INTO games (guild_id, name, required, max_players) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, name) DO UPDATE SET required = excluded.required, max_players = excluded.max_players",
+      "INSERT INTO games (guild_id, name, required, max_players, notify_role_id) VALUES (?, ?, ?, ?, ?) ON CONFLICT (guild_id, name) DO UPDATE SET required = excluded.required, max_players = excluded.max_players, notify_role_id = excluded.notify_role_id",
     )
-    .bind(guildId, game.name, game.min, game.max)
+    .bind(guildId, game.name, game.min, game.max, game.notifyRoleId)
     .run();
 }
 

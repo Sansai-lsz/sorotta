@@ -9,6 +9,7 @@ import {
   renderFinishResult,
   renderManagePanel,
   renderReadyNotice,
+  withRoleMention,
 } from "./render.ts";
 import type { ActiveParticipant, Participant } from "./tally.ts";
 
@@ -239,6 +240,22 @@ describe("renderBoard（終わった募集）", () => {
 describe("renderBoard のメンション", () => {
   it("一覧のメンションでは誰にも通知しない", () => {
     expect(renderBoard(base, [], jst("2026-11-01T17:00:00")).allowed_mentions).toEqual({ parse: [] });
+  });
+});
+
+describe("withRoleMention", () => {
+  const board = renderBoard(base, [], jst("2026-11-01T17:00:00"));
+
+  it("本文でロールにメンションし、そのロールにだけ通知を許す", () => {
+    const withRole = withRoleMention(board, "Apex", "r1");
+    expect(withRole.content).toBe("<@&r1> Apex の募集が出ました");
+    expect(withRole.allowed_mentions).toEqual({ parse: [], roles: ["r1"] });
+    expect(withRole.embeds).toEqual(board.embeds);
+    expect(withRole.components).toEqual(board.components);
+  });
+
+  it("ロールがなければ投稿を変えない", () => {
+    expect(withRoleMention(board, "Apex", null)).toBe(board);
   });
 });
 

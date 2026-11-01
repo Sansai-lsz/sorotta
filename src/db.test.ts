@@ -6,11 +6,14 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   applyAnswer,
   createRecruitment,
+  findGame,
   finishRecruitment,
   getRecruitment,
+  listGames,
   listParticipants,
   markNotified,
   readSnapshot,
+  upsertGame,
 } from "./db.ts";
 import type { Recruitment } from "./recruitment.ts";
 
@@ -85,8 +88,24 @@ function openDatabase(): D1Database {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec(migration("0001_init.sql"));
   sqlite.exec(migration("0002_time_buckets.sql"));
+  sqlite.exec(migration("0003_notify_role.sql"));
   return asD1(sqlite);
 }
+
+describe("games", () => {
+  it("通知するロールを登録して読み出せる", async () => {
+    const db = openDatabase();
+    await upsertGame(db, "g", { name: "Apex", min: 3, max: 3, notifyRoleId: "r1" });
+    expect(await findGame(db, "g", "Apex")).toEqual({ name: "Apex", min: 3, max: 3, notifyRoleId: "r1" });
+  });
+
+  it("登録し直すとロールも上書きし、省略すればロールを外す", async () => {
+    const db = openDatabase();
+    await upsertGame(db, "g", { name: "Apex", min: 3, max: null, notifyRoleId: "r1" });
+    await upsertGame(db, "g", { name: "Apex", min: 2, max: null, notifyRoleId: null });
+    expect(await listGames(db, "g")).toEqual([{ name: "Apex", min: 2, max: null, notifyRoleId: null }]);
+  });
+});
 
 const rec: Recruitment = {
   id: "100",

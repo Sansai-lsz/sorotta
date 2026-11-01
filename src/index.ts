@@ -13,7 +13,7 @@ import {
 } from "discord-api-types/v10";
 import { resolveAnswer, type AnswerAction, type AnswerOp, type AnswerResult } from "./answer.ts";
 import { bucketOf, isScope, isScopeOver, openHours, planRecruitment, type Scope } from "./buckets.ts";
-import { GAME_COMMAND, RECRUIT_COMMAND, SCOPE_OPTION } from "./commands.ts";
+import { GAME_COMMAND, NOTIFY_OPTION, RECRUIT_COMMAND, SCOPE_OPTION } from "./commands.ts";
 import { parseCustomId, parseSelectValue, type ComponentAction } from "./customId.ts";
 import { hoursSinceDateStart, gameToday, parseDateInput } from "./date.ts";
 import {
@@ -51,6 +51,7 @@ import {
   renderFinishResult,
   renderManagePanel,
   renderReadyNotice,
+  withRoleMention,
 } from "./render.ts";
 import { cancelNoticeTargets, tallyRecruitment, type Participant } from "./tally.ts";
 import { verifySignature } from "./verify.ts";
@@ -71,6 +72,11 @@ function stringOption(options: Option[] | undefined, name: string): string | und
 function integerOption(options: Option[] | undefined, name: string): number | undefined {
   const opt = findOption(options, name);
   return opt?.type === ApplicationCommandOptionType.Integer && typeof opt.value === "number" ? opt.value : undefined;
+}
+
+function roleOption(options: Option[] | undefined, name: string): string | undefined {
+  const opt = findOption(options, name);
+  return opt?.type === ApplicationCommandOptionType.Role ? opt.value : undefined;
 }
 
 function subcommand(options: Option[] | undefined): { name: string; options: Option[] | undefined } | undefined {
@@ -119,6 +125,10 @@ async function notifyIfReady(
   }
 }
 
+function roleSuffix(roleId: string | null): string {
+  return roleId === null ? "" : `（通知: <@&${roleId}>）`;
+}
+
 async function handleGameCommand(
   interaction: APIChatInputApplicationCommandInteraction,
   env: Env,
@@ -130,16 +140,17 @@ async function handleGameCommand(
       const name = stringOption(sub.options, "name")?.trim();
       const min = integerOption(sub.options, "players");
       const max = integerOption(sub.options, "max") ?? null;
+      const notifyRoleId = roleOption(sub.options, "role") ?? null;
       if (!name || min === undefined) return reply("ゲーム名と人数を指定してください", { ephemeral: true });
       if (max !== null && max < min) return reply("定員は最少人数以上にしてください", { ephemeral: true });
-      const game = { name, min, max };
+      const game = { name, min, max, notifyRoleId };
       await upsertGame(env.DB, guildId, game);
-      return reply(`${gameLabel(game)}を登録しました`);
+      return reply(`${gameLabel(game)}を登録しました${roleSuffix(notifyRoleId)}`);
     }
     case "list": {
       const games = await listGames(env.DB, guildId);
       if (games.length === 0) return reply("登録済みのゲームはありません。/game add で登録できます", { ephemeral: true });
-      return reply(games.map((g) => `・${gameLabel(g)}`).join("\n"), { ephemeral: true });
+      return reply(games.map((g) => `・${gameLabel(g)}${roleSuffix(g.notifyRoleId)}`).join("\n"), { ephemeral: true });
     }
     case "remove": {
       const name = stringOption(sub.options, "name") ?? "";
@@ -213,9 +224,10 @@ async function handleRecruitCommand(
       await notifyIfReady(env, interaction.token, snapshot.rec, snapshot.participants, now);
     })(),
   );
+  const notifyRoleId = roleOption(options, NOTIFY_OPTION) ?? game.notifyRoleId;
   return respond({
     type: InteractionResponseType.ChannelMessageWithSource,
-    data: renderBoard(snapshot.rec, snapshot.participants, now),
+    data: withRoleMention(renderBoard(snapshot.rec, snapshot.participants, now), game.name, notifyRoleId),
   });
 }
 
