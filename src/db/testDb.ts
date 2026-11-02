@@ -66,7 +66,7 @@ class FakeD1 {
 }
 
 export function asD1(sqlite: DatabaseSync): D1Database {
-  // db.ts が使う D1 のメソッドだけを node:sqlite で実装した偽物なので、型はここで一度だけ合わせる
+  // db/ のモジュールが使う D1 のメソッドだけを node:sqlite で実装した偽物なので、型はここで一度だけ合わせる
   return new FakeD1(sqlite) as unknown as D1Database;
 }
 
