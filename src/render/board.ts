@@ -1,12 +1,12 @@
 import {
-  ButtonStyle,
   ComponentType,
   type APIActionRowComponent,
-  type APIButtonComponent,
   type APIComponentInMessageActionRow,
   type APIEmbed,
   type APIInteractionResponseCallbackData,
   type APISelectMenuOption,
+  ButtonStyle,
+  type APIButtonComponent,
 } from "discord-api-types/v10";
 import {
   BUCKETS,
@@ -17,34 +17,22 @@ import {
   openHours,
   shortHourLabel,
   type Bucket,
-} from "./buckets.ts";
-import { encodeCustomId, encodeSelectValue } from "./customId.ts";
-import { formatDate } from "./date.ts";
-import type { Recruitment } from "./recruitment.ts";
+} from "../domain/buckets.ts";
+import { encodeCustomId, encodeSelectValue } from "../discord/customId.ts";
+import { formatDate } from "../domain/date.ts";
+import type { Recruitment } from "../domain/recruitment.ts";
 import {
   activeParticipants,
   recruitmentClock,
   tallyRecruitment,
   type Outcome,
   type Participant,
-  type Ready,
   type Slot,
-} from "./tally.ts";
+} from "../domain/tally.ts";
+
+import { button, mention, mentions } from "./shared.ts";
 
 type ActionRow = APIActionRowComponent<APIComponentInMessageActionRow>;
-
-const BUTTONS_PER_ROW = 5;
-const COLOR_ENDED = 0x99aab5;
-const COLOR_READY = 0x57f287;
-const COLOR_OPEN = 0x5865f2;
-
-function mention(userId: string): string {
-  return `<@${userId}>`;
-}
-
-function mentions(userIds: string[]): string {
-  return userIds.map(mention).join(" ");
-}
 
 export function playersLabel(min: number, max: number | null): string {
   return max === null ? `${min}人〜` : `${min}人〜・定員${max}人`;
@@ -54,13 +42,10 @@ export function gameLabel(game: { name: string; min: number; max: number | null 
   return `${game.name}（${playersLabel(game.min, game.max)}）`;
 }
 
-function button(
-  style: ButtonStyle.Primary | ButtonStyle.Secondary | ButtonStyle.Success | ButtonStyle.Danger,
-  label: string,
-  customId: string,
-): APIButtonComponent {
-  return { type: ComponentType.Button, style, label, custom_id: customId };
-}
+const BUTTONS_PER_ROW = 5;
+const COLOR_ENDED = 0x99aab5;
+const COLOR_READY = 0x57f287;
+const COLOR_OPEN = 0x5865f2;
 
 function chunk<T>(items: T[], size: number): T[][] {
   const out: T[][] = [];
@@ -202,68 +187,4 @@ function anyControls(rec: Recruitment, clock: number): ActionRow[] {
     ...footerButtons(rec),
   ];
   return [...selects, { type: ComponentType.ActionRow, components: buttons }];
-}
-
-export function renderReadyNotice(rec: Recruitment, ready: Ready): APIInteractionResponseCallbackData {
-  const where = rec.scope === "any" ? `${bucketOf(ready.bucket).label} ` : "";
-  return {
-    content: `🎮 ${rec.game} ${where}${shortHourLabel(ready.hour)}で${ready.members.length}人そろいました！ ${mentions(ready.members)}`,
-    allowed_mentions: { users: ready.members },
-  };
-}
-
-export function renderCancelNotice(rec: Recruitment, userIds: string[]): APIInteractionResponseCallbackData {
-  return {
-    content: [`${rec.game} の募集は中止になりました`, ...userIds.map(mention)].join(" "),
-    allowed_mentions: { users: userIds },
-  };
-}
-
-export function endedNotice(status: "closed" | "cancelled"): string {
-  return status === "closed" ? "この募集は締め切られています" : "この募集は中止されています";
-}
-
-export function renderFinishResult(
-  status: "closed" | "cancelled",
-  delivered: { board: boolean; notice: boolean },
-): string {
-  const done = status === "closed" ? "締め切りました" : "中止しました";
-  if (delivered.board && delivered.notice) return done;
-  const problem =
-    !delivered.board && !delivered.notice
-      ? "募集の投稿を書き換えられず、中止の通知も送れませんでした"
-      : !delivered.board
-        ? "募集の投稿を書き換えられませんでした"
-        : "中止の通知を送れませんでした";
-  return `${done}。ただし${problem}（bot の権限を確認してください）`;
-}
-
-export function renderManagePanel(rec: Recruitment): APIInteractionResponseCallbackData {
-  return {
-    content: "この募集を管理",
-    components: [
-      {
-        type: ComponentType.ActionRow,
-        components: [
-          button(ButtonStyle.Secondary, "締め切る", encodeCustomId({ kind: "close", recruitmentId: rec.id })),
-          button(ButtonStyle.Danger, "中止", encodeCustomId({ kind: "cancel", recruitmentId: rec.id })),
-        ],
-      },
-    ],
-    allowed_mentions: { parse: [] },
-  };
-}
-
-export function withRoleMention(
-  board: APIInteractionResponseCallbackData,
-  game: string,
-  roleId: string | null,
-): APIInteractionResponseCallbackData {
-  if (roleId === null) return board;
-  // 盤面の書き換えは content を送らないので、このメンションは最初の 1 回だけ届き、本文には残り続ける
-  return {
-    ...board,
-    content: `<@&${roleId}> ${game} の募集が出ました`,
-    allowed_mentions: { parse: [], roles: [roleId] },
-  };
 }

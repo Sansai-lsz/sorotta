@@ -1,5 +1,5 @@
-import { GAME_COMMAND, NOTIFY_OPTION, RECRUIT_COMMAND, USAGE_COMMAND } from "./commands.ts";
-import { reply } from "./discord.ts";
+import { GAME_COMMAND, NOTIFY_OPTION, RECRUIT_COMMAND, USAGE_COMMAND } from "../discord/commands.ts";
+import { reply } from "../discord/api.ts";
 
 export const USAGE_TEXT = `🎮 **ゲーム募集bot「そろった」の使い方**
 

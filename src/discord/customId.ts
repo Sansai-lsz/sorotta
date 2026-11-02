@@ -1,4 +1,5 @@
-import { isBucketKey, type BucketKey } from "./buckets.ts";
+import type { SelectValue } from "../domain/answer.ts";
+import { isBucketKey, type BucketKey } from "../domain/buckets.ts";
 
 export type ComponentAction =
   | { kind: "hour"; recruitmentId: string; hour: number }
@@ -9,8 +10,6 @@ export type ComponentAction =
   | { kind: "gear"; recruitmentId: string }
   | { kind: "close"; recruitmentId: string }
   | { kind: "cancel"; recruitmentId: string };
-
-export type SelectValue = { kind: "hour"; hour: number } | { kind: "now" } | { kind: "none" };
 
 const PREFIX = {
   hour: "h",
