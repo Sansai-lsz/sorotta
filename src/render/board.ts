@@ -133,7 +133,11 @@ export function renderBoard(
   };
 }
 
-// ロールへの通知は最初の投稿でだけ許す。書き換えのたびにロール全員へ通知が飛ばないようにする
+// 参加者のメンションは名前表示のためだけなので許さず、募集に保存したロールだけを許す
+function roleMentions(rec: Recruitment): { parse: []; roles?: string[] } {
+  return rec.notifyRoleId === null ? { parse: [] } : { parse: [], roles: [rec.notifyRoleId] };
+}
+
 export function boardInitialPayload(
   rec: Recruitment,
   participants: Participant[],
@@ -141,7 +145,7 @@ export function boardInitialPayload(
 ): APIInteractionResponseCallbackData {
   return {
     ...renderBoard(rec, participants, now),
-    allowed_mentions: rec.notifyRoleId === null ? { parse: [] } : { parse: [], roles: [rec.notifyRoleId] },
+    allowed_mentions: roleMentions(rec),
   };
 }
 
@@ -151,7 +155,9 @@ export function boardEditPayload(
   participants: Participant[],
   now: Date,
 ): RESTPatchAPIChannelMessageJSONBody {
-  return { ...renderBoard(rec, participants, now), content: null, embeds: [] };
+  // V2 のメッセージは編集のたびにメンションの記録を components から作り直すので、ロールも許可し続ける。
+  // 編集では通知が飛ばないため、ロールに届くのは最初の投稿の 1 回だけのまま
+  return { ...renderBoard(rec, participants, now), allowed_mentions: roleMentions(rec), content: null, embeds: [] };
 }
 
 function accentColor(ended: boolean, outcome: Outcome): number {

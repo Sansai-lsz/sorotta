@@ -241,13 +241,17 @@ describe("renderBoard のメンション", () => {
     expect(renderBoard(base, [], evening).components?.[0]?.type).toBe(ComponentType.Container);
   });
 
-  it("初回投稿だけ保存したロールへの通知を許可する", () => {
+  it("最初の投稿と書き換えで、保存したロールのメンションを許可する", () => {
     expect(boardInitialPayload({ ...base, notifyRoleId: "r1" }, [], evening).allowed_mentions).toEqual({
       parse: [],
       roles: ["r1"],
     });
     expect(boardInitialPayload(base, [], evening).allowed_mentions).toEqual({ parse: [] });
-    expect(boardEditPayload({ ...base, notifyRoleId: "r1" }, [], evening).allowed_mentions).toEqual({ parse: [] });
+    expect(boardEditPayload({ ...base, notifyRoleId: "r1" }, [], evening).allowed_mentions).toEqual({
+      parse: [],
+      roles: ["r1"],
+    });
+    expect(boardEditPayload(base, [], evening).allowed_mentions).toEqual({ parse: [] });
   });
 
   it("V2 フラグを付け、本文と embed を持たない", () => {
