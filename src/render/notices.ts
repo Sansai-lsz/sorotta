@@ -76,7 +76,7 @@ export function renderUndoPanel(
     ),
   });
   const answers = participant?.passed
-    ? [section("今日はパス", "all")]
+    ? [section("今日はパス", "pass")]
     : [
         ...bucketsOf(rec.scope).flatMap((bucket) => {
           const slot = participant?.slots[bucket.key];

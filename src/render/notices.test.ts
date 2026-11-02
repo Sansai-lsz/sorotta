@@ -71,7 +71,7 @@ describe("renderUndoPanel", () => {
     expect(renderUndoPanel(base, { userId: "a", passed: true }).components?.[1]).toEqual({
       type: ComponentType.Section,
       components: [{ type: ComponentType.TextDisplay, content: "今日はパス" }],
-      accessory: expect.objectContaining({ custom_id: "u:123:all" }),
+      accessory: expect.objectContaining({ custom_id: "u:123:pass" }),
     });
     expect(renderUndoPanel(base, undefined).components).toEqual([
       { type: ComponentType.TextDisplay, content: "あなたの回答" },

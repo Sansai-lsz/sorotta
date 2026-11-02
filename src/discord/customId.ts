@@ -65,7 +65,7 @@ export function parseCustomId(customId: string): ComponentAction | null {
     }
   }
   if (prefix === PREFIX.hour && NUMBER.test(arg)) return { kind: "hour", recruitmentId, hour: Number(arg) };
-  if (prefix === PREFIX.undo && (isBucketKey(arg) || arg === "anytime" || arg === "all"))
+  if (prefix === PREFIX.undo && (isBucketKey(arg) || arg === "anytime" || arg === "pass" || arg === "all"))
     return { kind: "undo", recruitmentId, target: arg };
   if (!isBucketKey(arg)) return null;
   if (prefix === PREFIX.now) return { kind: "now", recruitmentId, bucket: arg };

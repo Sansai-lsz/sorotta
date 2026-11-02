@@ -129,6 +129,14 @@ function answerStatements(db: D1Database, recruitmentId: string, userId: string,
       return [ensure, updateParticipant("anytime = 1 - anytime, passed = 0")];
     case "clearAnytime":
       return [ensure, updateParticipant("anytime = 0")];
+    case "clearPass":
+      return [
+        db
+          .prepare(
+            `UPDATE participants SET passed = 0 WHERE recruitment_id = ? AND user_id = ? AND passed = 1 AND ${WHILE_OPEN}`,
+          )
+          .bind(recruitmentId, userId, recruitmentId),
+      ];
     case "clearAll":
       return [
         ensure,

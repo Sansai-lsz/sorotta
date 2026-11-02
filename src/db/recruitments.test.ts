@@ -117,6 +117,25 @@ describe("db", () => {
     expect((await listParticipants(db, rec.id))[1]).toEqual({ userId: "a", passed: false, anytime: false, slots: {} });
   });
 
+  it("古いパス取り消しから後の時刻といつでもOK の回答を守る", async () => {
+    await applyAnswer(db, rec.id, "a", { kind: "pass" });
+    await applyAnswer(db, rec.id, "a", { kind: "slot", bucket: "night", hour: 21, now: false });
+    await applyAnswer(db, rec.id, "a", { kind: "toggleAnytime" });
+    await applyAnswer(db, rec.id, "a", { kind: "clearPass" });
+    expect((await listParticipants(db, rec.id))[1]).toEqual({
+      userId: "a",
+      passed: false,
+      anytime: true,
+      slots: { night: { hour: 21, now: false } },
+    });
+  });
+
+  it("パスだけを取り消して未回答に戻す", async () => {
+    await applyAnswer(db, rec.id, "a", { kind: "pass" });
+    await applyAnswer(db, rec.id, "a", { kind: "clearPass" });
+    expect((await listParticipants(db, rec.id))[1]).toEqual({ userId: "a", passed: false, anytime: false, slots: {} });
+  });
+
   it.each([
     { kind: "slot", bucket: "night", hour: 21, now: false },
     { kind: "clear", bucket: "noon" },
@@ -124,6 +143,7 @@ describe("db", () => {
     { kind: "pass" },
     { kind: "clearAnytime" },
     { kind: "clearAll" },
+    { kind: "clearPass" },
   ] as const)("締め切った後の回答 $kind は書き込まない", async (op) => {
     await applyAnswer(db, rec.id, "a", { kind: "slot", bucket: "noon", hour: 13, now: false });
     const before = await listParticipants(db, rec.id);

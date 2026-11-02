@@ -9,6 +9,7 @@ export type AnswerOp =
   | { kind: "toggleAnytime" }
   | { kind: "clearAnytime" }
   | { kind: "clearAll" }
+  | { kind: "clearPass" }
   | { kind: "pass" };
 
 // セレクトで選ばれた値は custom_id ではなく interaction.data.values で届くので、ここで 1 つにまとめる
@@ -20,7 +21,7 @@ export type AnswerAction =
   | { kind: "pass" };
 
 export type AnswerResult = { ok: true; op: AnswerOp } | { ok: false; message: string };
-export type UndoTarget = BucketKey | "anytime" | "all";
+export type UndoTarget = BucketKey | "anytime" | "pass" | "all";
 
 const INVALID: AnswerResult = { ok: false, message: "このボタンは使えません" };
 
@@ -68,6 +69,7 @@ export function resolveAnswer(action: AnswerAction, rec: { scope: Scope }, clock
 
 export function resolveUndo(target: UndoTarget, rec: { scope: Scope }): AnswerResult {
   if (target === "all") return { ok: true, op: { kind: "clearAll" } };
+  if (target === "pass") return { ok: true, op: { kind: "clearPass" } };
   if (target === "anytime") return rec.scope === "any" ? { ok: true, op: { kind: "clearAnytime" } } : INVALID;
   return inScope(rec.scope, target) ? { ok: true, op: { kind: "clear", bucket: target } } : INVALID;
 }

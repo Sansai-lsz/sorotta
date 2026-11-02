@@ -132,4 +132,8 @@ describe("resolveUndo", () => {
   it("パスも全部取り消すで未回答に戻す", () => {
     expect(resolveUndo("all", night)).toEqual({ ok: true, op: { kind: "clearAll" } });
   });
+
+  it("パスだけを取り消す操作にする", () => {
+    expect(resolveUndo("pass", night)).toEqual({ ok: true, op: { kind: "clearPass" } });
+  });
 });

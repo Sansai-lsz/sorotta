@@ -21,6 +21,7 @@ describe("custom_id", () => {
     { kind: "manageAnswers", recruitmentId: id },
     { kind: "undo", recruitmentId: id, target: "night" },
     { kind: "undo", recruitmentId: id, target: "anytime" },
+    { kind: "undo", recruitmentId: id, target: "pass" },
     { kind: "undo", recruitmentId: id, target: "all" },
     { kind: "close", recruitmentId: id },
     { kind: "cancel", recruitmentId: id },
@@ -36,11 +37,13 @@ describe("custom_id", () => {
     expect(encodeCustomId({ kind: "cancel", recruitmentId: "123" })).toBe("x:123");
     expect(encodeCustomId({ kind: "manageAnswers", recruitmentId: "123" })).toBe("m:123");
     expect(encodeCustomId({ kind: "undo", recruitmentId: "123", target: "all" })).toBe("u:123:all");
+    expect(encodeCustomId({ kind: "undo", recruitmentId: "123", target: "pass" })).toBe("u:123:pass");
   });
 
   it("特別な取り消し対象は時間帯のキーと衝突しない", () => {
     expect(BUCKETS.map((bucket) => bucket.key)).not.toContain("anytime");
     expect(BUCKETS.map((bucket) => bucket.key)).not.toContain("all");
+    expect(BUCKETS.map((bucket) => bucket.key)).not.toContain("pass");
   });
 
   it.each([
