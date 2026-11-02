@@ -1,8 +1,14 @@
-import { ButtonStyle, ComponentType, type APIInteractionResponseCallbackData } from "discord-api-types/v10";
-import { bucketOf, shortHourLabel } from "../domain/buckets.ts";
+import {
+  ButtonStyle,
+  ComponentType,
+  MessageFlags,
+  type APIInteractionResponseCallbackData,
+} from "discord-api-types/v10";
+import { bucketOf, bucketsOf, hourLabel, isHourOver, shortHourLabel } from "../domain/buckets.ts";
+import type { UndoTarget } from "../domain/answer.ts";
 import { encodeCustomId } from "../discord/customId.ts";
 import type { Recruitment } from "../domain/recruitment.ts";
-import type { Ready } from "../domain/tally.ts";
+import type { Participant, Ready } from "../domain/tally.ts";
 import { button, mention, mentions } from "./shared.ts";
 
 export function renderReadyNotice(rec: Recruitment, ready: Ready): APIInteractionResponseCallbackData {
@@ -55,16 +61,53 @@ export function renderManagePanel(rec: Recruitment): APIInteractionResponseCallb
   };
 }
 
-export function withRoleMention(
-  board: APIInteractionResponseCallbackData,
-  game: string,
-  roleId: string | null,
+export function renderUndoPanel(
+  rec: Recruitment,
+  participant: Participant | undefined,
+  clock: number,
 ): APIInteractionResponseCallbackData {
-  if (roleId === null) return board;
-  // 盤面の書き換えは content を送らないので、このメンションは最初の 1 回だけ届き、本文には残り続ける
+  const text = (content: string) => ({ type: ComponentType.TextDisplay as const, content });
+  const section = (content: string, target: UndoTarget) => ({
+    type: ComponentType.Section as const,
+    components: [text(content)],
+    accessory: button(
+      ButtonStyle.Secondary,
+      "取り消す",
+      encodeCustomId({ kind: "undo", recruitmentId: rec.id, target }),
+    ),
+  });
+  const answers = participant?.passed
+    ? [section("今日はパス", "pass")]
+    : [
+        ...bucketsOf(rec.scope).flatMap((bucket) => {
+          const slot = participant?.slots[bucket.key];
+          if (!slot) return [];
+          const label = rec.scope === "any" ? `${bucket.emoji} ${bucket.label}　` : "";
+          const content = `${label}${hourLabel(slot.hour, rec.date)}${slot.now ? " ⚡今すぐ" : ""}`;
+          return [bucket.hours.every((hour) => isHourOver(hour, clock)) ? text(content) : section(content, bucket.key)];
+        }),
+        ...(participant?.anytime ? [section("🙆 いつでもOK", "anytime")] : []),
+      ];
   return {
-    ...board,
-    content: `<@&${roleId}> ${game} の募集が出ました`,
-    allowed_mentions: { parse: [], roles: [roleId] },
+    flags: MessageFlags.IsComponentsV2,
+    components: [
+      text("あなたの回答"),
+      ...(answers.length === 0 ? [text("まだ回答していません")] : answers),
+      ...(answers.filter((answer) => answer.type === ComponentType.Section).length >= 2
+        ? [
+            {
+              type: ComponentType.ActionRow as const,
+              components: [
+                button(
+                  ButtonStyle.Secondary,
+                  "全部取り消す",
+                  encodeCustomId({ kind: "undo", recruitmentId: rec.id, target: "all" }),
+                ),
+              ],
+            },
+          ]
+        : []),
+    ],
+    allowed_mentions: { parse: [] },
   };
 }

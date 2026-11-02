@@ -22,7 +22,7 @@ function nullable<T>(row: Row, key: string, read: (row: Row, key: string) => T):
 }
 
 const RECRUITMENT_COLUMNS =
-  "id, guild_id AS guildId, channel_id AS channelId, message_id AS messageId, game, required AS min, max_players AS max, date, scope, recruiter_id AS hostId, status, ready_bucket AS readyBucket, ready_hour AS readyHour";
+  "id, guild_id AS guildId, channel_id AS channelId, message_id AS messageId, game, required AS min, max_players AS max, date, scope, recruiter_id AS hostId, notify_role_id AS notifyRoleId, status, ready_bucket AS readyBucket, ready_hour AS readyHour";
 
 function parseRecruitment(row: Row): Recruitment {
   const id = text(row, "id");
@@ -49,6 +49,7 @@ function parseRecruitment(row: Row): Recruitment {
     date: text(row, "date"),
     scope,
     hostId: text(row, "hostId"),
+    notifyRoleId: nullable(row, "notifyRoleId", text),
     status,
     notifiedSlot,
   };
@@ -126,6 +127,30 @@ function answerStatements(db: D1Database, recruitmentId: string, userId: string,
       ];
     case "toggleAnytime":
       return [ensure, updateParticipant("anytime = 1 - anytime, passed = 0")];
+    case "clearAnytime":
+      return [ensure, updateParticipant("anytime = 0")];
+    case "clearPass":
+      return [
+        db
+          .prepare(
+            `UPDATE participants SET passed = 0 WHERE recruitment_id = ? AND user_id = ? AND passed = 1 AND ${WHILE_OPEN}`,
+          )
+          .bind(recruitmentId, userId, recruitmentId),
+      ];
+    case "clearAll":
+      return [
+        ensure,
+        updateParticipant("anytime = 0, passed = 0"),
+        ...(op.buckets.length > 0
+          ? [
+              db
+                .prepare(
+                  `DELETE FROM slots WHERE recruitment_id = ? AND user_id = ? AND bucket IN (${op.buckets.map(() => "?").join(", ")}) AND ${WHILE_OPEN}`,
+                )
+                .bind(recruitmentId, userId, ...op.buckets, recruitmentId),
+            ]
+          : []),
+      ];
     case "pass":
       return [
         ensure,
@@ -145,7 +170,7 @@ export async function createRecruitment(db: D1Database, rec: Recruitment, hostJo
   await db.batch([
     db
       .prepare(
-        "INSERT INTO recruitments (id, guild_id, channel_id, message_id, game, required, max_players, date, scope, recruiter_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO recruitments (id, guild_id, channel_id, message_id, game, required, max_players, date, scope, recruiter_id, notify_role_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       )
       .bind(
         rec.id,
@@ -158,6 +183,7 @@ export async function createRecruitment(db: D1Database, rec: Recruitment, hostJo
         rec.date,
         rec.scope,
         rec.hostId,
+        rec.notifyRoleId,
         rec.status,
       ),
     ...answerStatements(db, rec.id, rec.hostId, hostJoin),

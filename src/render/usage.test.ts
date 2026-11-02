@@ -18,6 +18,10 @@ describe("USAGE_TEXT", () => {
     expect(USAGE_TEXT).toContain(`${NOTIFY_OPTION}:`);
     expect(USAGE_TEXT).toContain("role:");
   });
+
+  it("参加者に回答の取り消し方を案内する", () => {
+    expect(USAGE_TEXT).toContain("・回答を取り消す → 自分の回答を選んで取り消せる");
+  });
 });
 
 describe("usageResponse", () => {

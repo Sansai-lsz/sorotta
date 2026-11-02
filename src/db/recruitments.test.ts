@@ -23,6 +23,7 @@ const rec: Recruitment = {
   date: "2026-11-01",
   scope: "any",
   hostId: "host",
+  notifyRoleId: null,
   status: "open",
   notifiedSlot: null,
 };
@@ -38,6 +39,13 @@ describe("db", () => {
   it("募集を作ると募集した人が参加者になる", async () => {
     expect(await getRecruitment(db, rec.id)).toEqual(rec);
     expect(await listParticipants(db, rec.id)).toEqual([{ userId: "host", passed: false, anytime: true, slots: {} }]);
+  });
+
+  it("募集の通知ロールを保存し、読み戻す", async () => {
+    const withRole = { ...rec, id: "101", notifyRoleId: "r1" };
+    await createRecruitment(db, withRole, { kind: "toggleAnytime" });
+    expect(await getRecruitment(db, withRole.id)).toEqual(withRole);
+    expect((await readSnapshot(db, withRole.id))?.rec.notifyRoleId).toBe("r1");
   });
 
   it("回答し直しても最初に回答した順を保つ", async () => {
@@ -86,11 +94,77 @@ describe("db", () => {
     });
   });
 
+  it("いつでもOK だけを取り消して時間帯の回答を残す", async () => {
+    await applyAnswer(db, rec.id, "a", { kind: "slot", bucket: "night", hour: 21, now: false });
+    await applyAnswer(db, rec.id, "a", { kind: "toggleAnytime" });
+    await applyAnswer(db, rec.id, "a", { kind: "clearAnytime" });
+    await applyAnswer(db, rec.id, "a", { kind: "clearAnytime" });
+    expect((await listParticipants(db, rec.id))[1]).toEqual({
+      userId: "a",
+      passed: false,
+      anytime: false,
+      slots: { night: { hour: 21, now: false } },
+    });
+  });
+
+  it("パスとすべての回答を取り消して未回答に戻す", async () => {
+    await applyAnswer(db, rec.id, "a", { kind: "pass" });
+    await applyAnswer(db, rec.id, "a", { kind: "clearAll", buckets: ["morning", "noon", "night", "late"] });
+    expect((await listParticipants(db, rec.id))[1]).toEqual({ userId: "a", passed: false, anytime: false, slots: {} });
+    await applyAnswer(db, rec.id, "a", { kind: "slot", bucket: "night", hour: 21, now: false });
+    await applyAnswer(db, rec.id, "a", { kind: "toggleAnytime" });
+    await applyAnswer(db, rec.id, "a", { kind: "clearAll", buckets: ["morning", "noon", "night", "late"] });
+    expect((await listParticipants(db, rec.id))[1]).toEqual({ userId: "a", passed: false, anytime: false, slots: {} });
+  });
+
+  it("全部取り消すでも終了済み時間帯の slots は残す", async () => {
+    await applyAnswer(db, rec.id, "a", { kind: "slot", bucket: "morning", hour: 9, now: false });
+    await applyAnswer(db, rec.id, "a", { kind: "slot", bucket: "night", hour: 21, now: false });
+    await applyAnswer(db, rec.id, "a", { kind: "toggleAnytime" });
+    await applyAnswer(db, rec.id, "a", { kind: "clearAll", buckets: ["night", "late"] });
+    expect((await listParticipants(db, rec.id))[1]).toEqual({
+      userId: "a",
+      passed: false,
+      anytime: false,
+      slots: { morning: { hour: 9, now: false } },
+    });
+    await applyAnswer(db, rec.id, "a", { kind: "slot", bucket: "noon", hour: 13, now: false });
+    await applyAnswer(db, rec.id, "a", { kind: "clearAll", buckets: [] });
+    expect((await listParticipants(db, rec.id))[1]).toEqual({
+      userId: "a",
+      passed: false,
+      anytime: false,
+      slots: { morning: { hour: 9, now: false }, noon: { hour: 13, now: false } },
+    });
+  });
+
+  it("古いパス取り消しから後の時刻といつでもOK の回答を守る", async () => {
+    await applyAnswer(db, rec.id, "a", { kind: "pass" });
+    await applyAnswer(db, rec.id, "a", { kind: "slot", bucket: "night", hour: 21, now: false });
+    await applyAnswer(db, rec.id, "a", { kind: "toggleAnytime" });
+    await applyAnswer(db, rec.id, "a", { kind: "clearPass" });
+    expect((await listParticipants(db, rec.id))[1]).toEqual({
+      userId: "a",
+      passed: false,
+      anytime: true,
+      slots: { night: { hour: 21, now: false } },
+    });
+  });
+
+  it("パスだけを取り消して未回答に戻す", async () => {
+    await applyAnswer(db, rec.id, "a", { kind: "pass" });
+    await applyAnswer(db, rec.id, "a", { kind: "clearPass" });
+    expect((await listParticipants(db, rec.id))[1]).toEqual({ userId: "a", passed: false, anytime: false, slots: {} });
+  });
+
   it.each([
     { kind: "slot", bucket: "night", hour: 21, now: false },
     { kind: "clear", bucket: "noon" },
     { kind: "toggleAnytime" },
     { kind: "pass" },
+    { kind: "clearAnytime" },
+    { kind: "clearAll", buckets: ["morning", "noon", "night", "late"] },
+    { kind: "clearPass" },
   ] as const)("締め切った後の回答 $kind は書き込まない", async (op) => {
     await applyAnswer(db, rec.id, "a", { kind: "slot", bucket: "noon", hour: 13, now: false });
     const before = await listParticipants(db, rec.id);
@@ -137,6 +211,7 @@ describe("migration 0002", () => {
       INSERT INTO entries (recruitment_id, user_id, hour) VALUES ('1', 'a', 21);
     `);
     sqlite.exec(migration("0002_time_buckets.sql"));
+    sqlite.exec(migration("0004_recruitment_notify_role.sql"));
     const db = asD1(sqlite);
 
     expect(await getRecruitment(db, "1")).toEqual({
@@ -150,6 +225,7 @@ describe("migration 0002", () => {
       date: "2026-10-31",
       scope: "night",
       hostId: "host",
+      notifyRoleId: null,
       status: "closed",
       notifiedSlot: null,
     });

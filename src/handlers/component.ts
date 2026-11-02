@@ -3,8 +3,9 @@ import {
   InteractionResponseType,
   MessageFlags,
   type APIMessageComponentInteraction,
+  type APITextDisplayComponent,
 } from "discord-api-types/v10";
-import { resolveAnswer, type AnswerAction, type AnswerResult } from "../domain/answer.ts";
+import { resolveAnswer, resolveUndo, type AnswerAction, type AnswerResult, type UndoTarget } from "../domain/answer.ts";
 import { hoursSinceDateStart } from "../domain/date.ts";
 import {
   applyAnswer,
@@ -16,10 +17,16 @@ import {
 } from "../db/recruitments.ts";
 import { createChannelMessage, editOriginal, ephemeralMessage, followUp, reply, respond } from "../discord/api.ts";
 import { parseCustomId, parseSelectValue, type ComponentAction } from "../discord/customId.ts";
-import { cancelNoticeTargets } from "../domain/tally.ts";
-import { renderBoard } from "../render/board.ts";
-import { endedNotice, renderCancelNotice, renderFinishResult, renderManagePanel } from "../render/notices.ts";
-import { notifyIfReady, publishEndedBoard, runInBackground, userIdOf } from "./shared.ts";
+import { cancelNoticeTargets, type Participant } from "../domain/tally.ts";
+import { boardEditPayload } from "../render/board.ts";
+import {
+  endedNotice,
+  renderCancelNotice,
+  renderFinishResult,
+  renderManagePanel,
+  renderUndoPanel,
+} from "../render/notices.ts";
+import { notifyIfReady, publishBoard, runInBackground, userIdOf } from "./shared.ts";
 
 const UNUSABLE = "このボタンは使えません";
 
@@ -64,7 +71,7 @@ async function updateBoard(
     await followUp(env.DISCORD_APP_ID, interaction.token, ephemeralMessage(UNUSABLE));
     return;
   }
-  await editOriginal(env.DISCORD_APP_ID, interaction.token, renderBoard(snapshot.rec, snapshot.participants, now));
+  await editOriginal(env.DISCORD_APP_ID, interaction.token, boardEditPayload(snapshot.rec, snapshot.participants, now));
 
   const refusal = !result.ok
     ? result.message
@@ -94,7 +101,7 @@ async function finishFromPanel(
     });
     return;
   }
-  const board = await publishEndedBoard(env, rec.id, new Date());
+  const board = await publishBoard(env, rec.id, new Date());
   let notice = true;
   if (status === "cancelled") {
     const targets = cancelNoticeTargets(rec, await listParticipants(env.DB, rec.id));
@@ -126,6 +133,78 @@ async function openManagePanel(
     type: InteractionResponseType.ChannelMessageWithSource,
     data: { ...renderManagePanel(rec), flags: MessageFlags.Ephemeral },
   });
+}
+
+async function openUndoPanel(
+  interaction: APIMessageComponentInteraction,
+  env: Env,
+  ctx: ExecutionContext,
+  recruitmentId: string,
+  userId: string,
+): Promise<Response> {
+  const snapshot = await readSnapshot(env.DB, recruitmentId);
+  if (!snapshot) return reply(UNUSABLE, { ephemeral: true });
+  const { rec, participants } = snapshot;
+  if (rec.messageId === null) {
+    runInBackground(ctx, "saveMessageId", saveMessageId(env.DB, rec.id, interaction.message.id));
+  }
+  if (rec.status !== "open") return reply(endedNotice(rec.status), { ephemeral: true });
+  return respond({
+    type: InteractionResponseType.ChannelMessageWithSource,
+    data: {
+      ...renderUndoPanel(rec, answerOf(participants, userId), hoursSinceDateStart(rec.date, new Date())),
+      flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+    },
+  });
+}
+
+function answerOf(participants: Participant[], userId: string): Participant | undefined {
+  return participants.find((p) => p.userId === userId);
+}
+
+// 取り消しパネルは Components V2 なので、文言だけに差し替えるときも TextDisplay で送る
+function textPanel(content: string): { components: [APITextDisplayComponent] } {
+  return { components: [{ type: ComponentType.TextDisplay, content }] };
+}
+
+async function undoFromPanel(
+  interaction: APIMessageComponentInteraction,
+  env: Env,
+  recruitmentId: string,
+  userId: string,
+  target: UndoTarget,
+): Promise<void> {
+  const rec = await getRecruitment(env.DB, recruitmentId);
+  if (!rec) {
+    await editOriginal(env.DISCORD_APP_ID, interaction.token, textPanel(UNUSABLE));
+    return;
+  }
+  if (rec.status !== "open") {
+    await editOriginal(env.DISCORD_APP_ID, interaction.token, textPanel(endedNotice(rec.status)));
+    return;
+  }
+  const now = new Date();
+  const result = resolveUndo(target, rec, hoursSinceDateStart(rec.date, now));
+  if (result.ok) await applyAnswer(env.DB, rec.id, userId, result.op);
+  const snapshot = await readSnapshot(env.DB, rec.id);
+  if (!snapshot) return;
+  const { rec: latest, participants } = snapshot;
+  await editOriginal(
+    env.DISCORD_APP_ID,
+    interaction.token,
+    latest.status === "open"
+      ? renderUndoPanel(latest, answerOf(participants, userId), hoursSinceDateStart(latest.date, now))
+      : textPanel(endedNotice(latest.status)),
+  );
+  if (!result.ok) {
+    await followUp(env.DISCORD_APP_ID, interaction.token, ephemeralMessage(result.message));
+    return;
+  }
+  if (!(await publishBoard(env, rec.id, now))) {
+    await followUp(env.DISCORD_APP_ID, interaction.token, ephemeralMessage("盤面を書き換えられませんでした"));
+    return;
+  }
+  if (latest.status === "open") await notifyIfReady(env, interaction.token, latest, participants, now);
 }
 
 function toAnswerAction(
@@ -162,6 +241,17 @@ export async function handleComponent(
   switch (action.kind) {
     case "gear":
       return openManagePanel(interaction, env, ctx, action.recruitmentId, userId);
+    case "manageAnswers":
+      return openUndoPanel(interaction, env, ctx, action.recruitmentId, userId);
+    case "undo":
+      runComponentTask(
+        ctx,
+        env,
+        interaction,
+        "undoFromPanel",
+        undoFromPanel(interaction, env, action.recruitmentId, userId, action.target),
+      );
+      return respond({ type: InteractionResponseType.DeferredMessageUpdate });
     case "close":
     case "cancel":
       runComponentTask(

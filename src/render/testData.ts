@@ -14,6 +14,7 @@ export const base: Recruitment = {
   date: "2026-11-01",
   scope: "night",
   hostId: "host",
+  notifyRoleId: null,
   status: "open",
   notifiedSlot: null,
 };

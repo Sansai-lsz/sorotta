@@ -15,6 +15,7 @@ export type Recruitment = {
   date: string;
   scope: Scope;
   hostId: string;
+  notifyRoleId: string | null;
   status: RecruitmentStatus;
   notifiedSlot: ReadySlot | null;
 };

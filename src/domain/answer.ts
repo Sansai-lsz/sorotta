@@ -7,6 +7,9 @@ export type AnswerOp =
   | { kind: "slot"; bucket: BucketKey; hour: number; now: boolean }
   | { kind: "clear"; bucket: BucketKey }
   | { kind: "toggleAnytime" }
+  | { kind: "clearAnytime" }
+  | { kind: "clearAll"; buckets: readonly BucketKey[] }
+  | { kind: "clearPass" }
   | { kind: "pass" };
 
 // セレクトで選ばれた値は custom_id ではなく interaction.data.values で届くので、ここで 1 つにまとめる
@@ -18,6 +21,7 @@ export type AnswerAction =
   | { kind: "pass" };
 
 export type AnswerResult = { ok: true; op: AnswerOp } | { ok: false; message: string };
+export type UndoTarget = BucketKey | "anytime" | "pass" | "all";
 
 const INVALID: AnswerResult = { ok: false, message: "このボタンは使えません" };
 
@@ -61,4 +65,25 @@ export function resolveAnswer(action: AnswerAction, rec: { scope: Scope }, clock
     case "pass":
       return { ok: true, op: { kind: "pass" } };
   }
+}
+
+export function resolveUndo(target: UndoTarget, rec: { scope: Scope }, clock: number): AnswerResult {
+  if (target === "all") {
+    return {
+      ok: true,
+      op: {
+        kind: "clearAll",
+        buckets: bucketsOf(rec.scope)
+          .filter((bucket) => !bucket.hours.every((hour) => isHourOver(hour, clock)))
+          .map((bucket) => bucket.key),
+      },
+    };
+  }
+  if (target === "pass") return { ok: true, op: { kind: "clearPass" } };
+  if (target === "anytime") return rec.scope === "any" ? { ok: true, op: { kind: "clearAnytime" } } : INVALID;
+  if (!inScope(rec.scope, target)) return INVALID;
+  if (bucketOf(target).hours.every((hour) => isHourOver(hour, clock))) {
+    return { ok: false, message: "その時間帯はもう終わっています" };
+  }
+  return { ok: true, op: { kind: "clear", bucket: target } };
 }

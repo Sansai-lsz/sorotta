@@ -13,8 +13,7 @@ import { ephemeralMessage, followUp, getOriginalMessageId, reply, respond } from
 import type { AnswerOp } from "../domain/answer.ts";
 import type { Recruitment } from "../domain/recruitment.ts";
 import { checkNotifyRole, chooseNotifyRole, type RoleCheck } from "../domain/notifyRole.ts";
-import { gameLabel, renderBoard } from "../render/board.ts";
-import { withRoleMention } from "../render/notices.ts";
+import { boardInitialPayload, gameLabel } from "../render/board.ts";
 import { usageResponse } from "../render/usage.ts";
 import { notifyIfReady, runInBackground, userIdOf } from "./shared.ts";
 
@@ -134,6 +133,7 @@ async function handleRecruitCommand(
   const roleInput = roleOption(options, NOTIFY_OPTION);
   const roleCheck = roleCheckOf(interaction, roleInput, guildId);
   if (!roleCheck.ok) return reply(roleCheck.message, { ephemeral: true });
+  const notifyRoleId = chooseNotifyRole(roleInput, game.notifyRoleId);
 
   const rec: Recruitment = {
     id: interaction.id,
@@ -146,6 +146,7 @@ async function handleRecruitCommand(
     date: plan.date,
     scope: plan.scope,
     hostId,
+    notifyRoleId,
     status: "open",
     notifiedSlot: null,
   };
@@ -166,10 +167,9 @@ async function handleRecruitCommand(
       await notifyIfReady(env, interaction.token, snapshot.rec, snapshot.participants, now);
     })(),
   );
-  const notifyRoleId = chooseNotifyRole(roleInput, game.notifyRoleId);
   return respond({
     type: InteractionResponseType.ChannelMessageWithSource,
-    data: withRoleMention(renderBoard(snapshot.rec, snapshot.participants, now), game.name, notifyRoleId),
+    data: boardInitialPayload(snapshot.rec, snapshot.participants, now),
   });
 }
 

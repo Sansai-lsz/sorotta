@@ -7,6 +7,7 @@ import {
   type ComponentAction,
 } from "./customId.ts";
 import type { SelectValue } from "../domain/answer.ts";
+import { BUCKETS } from "../domain/buckets.ts";
 
 describe("custom_id", () => {
   const id = "1234567890123456789";
@@ -17,6 +18,11 @@ describe("custom_id", () => {
     { kind: "anytime", recruitmentId: id },
     { kind: "pass", recruitmentId: id },
     { kind: "gear", recruitmentId: id },
+    { kind: "manageAnswers", recruitmentId: id },
+    { kind: "undo", recruitmentId: id, target: "night" },
+    { kind: "undo", recruitmentId: id, target: "anytime" },
+    { kind: "undo", recruitmentId: id, target: "pass" },
+    { kind: "undo", recruitmentId: id, target: "all" },
     { kind: "close", recruitmentId: id },
     { kind: "cancel", recruitmentId: id },
   ];
@@ -29,6 +35,15 @@ describe("custom_id", () => {
     expect(encodeCustomId({ kind: "hour", recruitmentId: "123", hour: 21 })).toBe("h:123:21");
     expect(encodeCustomId({ kind: "select", recruitmentId: "123", bucket: "noon" })).toBe("s:123:noon");
     expect(encodeCustomId({ kind: "cancel", recruitmentId: "123" })).toBe("x:123");
+    expect(encodeCustomId({ kind: "manageAnswers", recruitmentId: "123" })).toBe("m:123");
+    expect(encodeCustomId({ kind: "undo", recruitmentId: "123", target: "all" })).toBe("u:123:all");
+    expect(encodeCustomId({ kind: "undo", recruitmentId: "123", target: "pass" })).toBe("u:123:pass");
+  });
+
+  it("特別な取り消し対象は時間帯のキーと衝突しない", () => {
+    expect(BUCKETS.map((bucket) => bucket.key)).not.toContain("anytime");
+    expect(BUCKETS.map((bucket) => bucket.key)).not.toContain("all");
+    expect(BUCKETS.map((bucket) => bucket.key)).not.toContain("pass");
   });
 
   it.each([
@@ -43,6 +58,9 @@ describe("custom_id", () => {
     "p:abc",
     "a:123:night:1",
     "h::21",
+    "u:123:other",
+    "u:123",
+    "m:123:night",
   ])("壊れた入力 %j は null", (input) => {
     expect(parseCustomId(input)).toBeNull();
   });

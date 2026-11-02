@@ -152,6 +152,7 @@ describe("tallyRecruitment", () => {
     date: "2026-11-01",
     scope: "any",
     hostId: "x",
+    notifyRoleId: null,
     status: "open",
     notifiedSlot: null,
   };
