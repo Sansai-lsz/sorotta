@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { editChannelMessage, editOriginal, followUp, getOriginalMessageId } from "./discord.ts";
+import { editChannelMessage, editOriginal, followUp, getOriginalMessageId } from "./api.ts";
 
 const TOKEN = "secret-interaction-token";
 

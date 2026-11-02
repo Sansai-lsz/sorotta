@@ -1,4 +1,4 @@
-import { commands } from "../src/commands.ts";
+import { commands } from "../src/discord/commands.ts";
 
 const { DISCORD_APP_ID, DISCORD_GUILD_ID, DISCORD_BOT_TOKEN } = process.env;
 if (!DISCORD_APP_ID || !DISCORD_GUILD_ID || !DISCORD_BOT_TOKEN) {

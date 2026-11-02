@@ -5,8 +5,8 @@ import {
   parseCustomId,
   parseSelectValue,
   type ComponentAction,
-  type SelectValue,
 } from "./customId.ts";
+import type { SelectValue } from "../domain/answer.ts";
 
 describe("custom_id", () => {
   const id = "1234567890123456789";

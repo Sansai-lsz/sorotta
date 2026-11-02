@@ -1,6 +1,6 @@
 import { MessageFlags } from "discord-api-types/v10";
 import { describe, expect, it } from "vitest";
-import { commands, GAME_COMMAND, NOTIFY_OPTION, RECRUIT_COMMAND, USAGE_COMMAND } from "./commands.ts";
+import { commands, GAME_COMMAND, NOTIFY_OPTION, RECRUIT_COMMAND, USAGE_COMMAND } from "../discord/commands.ts";
 import { USAGE_TEXT, usageResponse } from "./usage.ts";
 
 // Discord の 1 メッセージの上限

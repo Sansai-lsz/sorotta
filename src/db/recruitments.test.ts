@@ -1,111 +1,16 @@
-/// <reference types="node" />
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { DatabaseSync, type SQLInputValue } from "node:sqlite";
+import { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   applyAnswer,
   createRecruitment,
-  findGame,
   finishRecruitment,
   getRecruitment,
-  listGames,
   listParticipants,
   markNotified,
   readSnapshot,
-  upsertGame,
-} from "./db.ts";
-import type { Recruitment } from "./recruitment.ts";
-
-function migration(name: string): string {
-  return readFileSync(join(import.meta.dirname, "..", "migrations", name), "utf8");
-}
-
-function toSqlValue(value: unknown): SQLInputValue {
-  if (value === null || typeof value === "string" || typeof value === "number") return value;
-  throw new Error(`unsupported bind value: ${String(value)}`);
-}
-
-class FakeStatement {
-  constructor(
-    private readonly sqlite: DatabaseSync,
-    private readonly sql: string,
-    private readonly params: SQLInputValue[] = [],
-  ) {}
-
-  bind(...values: unknown[]): FakeStatement {
-    return new FakeStatement(this.sqlite, this.sql, values.map(toSqlValue));
-  }
-
-  execute() {
-    const stmt = this.sqlite.prepare(this.sql);
-    if (stmt.columns().length > 0) {
-      return { success: true, meta: { changes: 0 }, results: stmt.all(...this.params) };
-    }
-    const { changes } = stmt.run(...this.params);
-    return { success: true, meta: { changes: Number(changes) }, results: [] };
-  }
-
-  async run() {
-    return this.execute();
-  }
-
-  async all() {
-    return this.execute();
-  }
-
-  async first() {
-    return this.sqlite.prepare(this.sql).get(...this.params) ?? null;
-  }
-}
-
-class FakeD1 {
-  constructor(private readonly sqlite: DatabaseSync) {}
-
-  prepare(sql: string): FakeStatement {
-    return new FakeStatement(this.sqlite, sql);
-  }
-
-  async batch(statements: FakeStatement[]) {
-    this.sqlite.exec("BEGIN");
-    try {
-      const results = statements.map((s) => s.execute());
-      this.sqlite.exec("COMMIT");
-      return results;
-    } catch (err) {
-      this.sqlite.exec("ROLLBACK");
-      throw err;
-    }
-  }
-}
-
-function asD1(sqlite: DatabaseSync): D1Database {
-  // db.ts が使う D1 のメソッドだけを node:sqlite で実装した偽物なので、型はここで一度だけ合わせる
-  return new FakeD1(sqlite) as unknown as D1Database;
-}
-
-function openDatabase(): D1Database {
-  const sqlite = new DatabaseSync(":memory:");
-  sqlite.exec(migration("0001_init.sql"));
-  sqlite.exec(migration("0002_time_buckets.sql"));
-  sqlite.exec(migration("0003_notify_role.sql"));
-  return asD1(sqlite);
-}
-
-describe("games", () => {
-  it("通知するロールを登録して読み出せる", async () => {
-    const db = openDatabase();
-    await upsertGame(db, "g", { name: "Apex", min: 3, max: 3, notifyRoleId: "r1" });
-    expect(await findGame(db, "g", "Apex")).toEqual({ name: "Apex", min: 3, max: 3, notifyRoleId: "r1" });
-  });
-
-  it("登録し直すとロールも上書きし、省略すればロールを外す", async () => {
-    const db = openDatabase();
-    await upsertGame(db, "g", { name: "Apex", min: 3, max: null, notifyRoleId: "r1" });
-    await upsertGame(db, "g", { name: "Apex", min: 2, max: null, notifyRoleId: null });
-    expect(await listGames(db, "g")).toEqual([{ name: "Apex", min: 2, max: null, notifyRoleId: null }]);
-  });
-});
+} from "./recruitments.ts";
+import type { Recruitment } from "../domain/recruitment.ts";
+import { asD1, migration, openDatabase } from "./testDb.ts";
 
 const rec: Recruitment = {
   id: "100",
@@ -249,17 +154,5 @@ describe("migration 0002", () => {
       notifiedSlot: null,
     });
     expect(sqlite.prepare("SELECT name FROM sqlite_master WHERE name = 'entries'").all()).toEqual([]);
-  });
-});
-
-describe("migration 0003", () => {
-  it("前から登録してあるゲームはロールなしで読める", async () => {
-    const sqlite = new DatabaseSync(":memory:");
-    sqlite.exec(migration("0001_init.sql"));
-    sqlite.exec(migration("0002_time_buckets.sql"));
-    sqlite.exec("INSERT INTO games (guild_id, name, required, max_players) VALUES ('g', 'Apex', 3, 3);");
-    sqlite.exec(migration("0003_notify_role.sql"));
-
-    expect(await findGame(asD1(sqlite), "g", "Apex")).toEqual({ name: "Apex", min: 3, max: 3, notifyRoleId: null });
   });
 });

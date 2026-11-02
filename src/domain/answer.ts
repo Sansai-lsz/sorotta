@@ -1,5 +1,7 @@
 import { bucketOf, bucketsOf, hasHour, isHourOver, nowHourIn, type BucketKey, type Scope } from "./buckets.ts";
-import type { SelectValue } from "./customId.ts";
+
+/** 時間帯ごとのセレクトで選べる値 */
+export type SelectValue = { kind: "hour"; hour: number } | { kind: "now" } | { kind: "none" };
 
 export type AnswerOp =
   | { kind: "slot"; bucket: BucketKey; hour: number; now: boolean }
