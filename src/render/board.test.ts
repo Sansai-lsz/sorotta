@@ -84,18 +84,18 @@ describe("renderBoard（時間帯を 1 つ指定した募集）", () => {
     expect(labelsOf(base, [], evening)).toEqual([
       ["18時〜", "19時〜", "20時〜", "21時〜", "22時〜"],
       ["23時〜"],
-      ["今日はパス", "⚙"],
+      ["回答を取り消す", "今日はパス", "⚙"],
     ]);
     expect(labelsOf(base, [], jst("2026-11-01T21:30:00"))).toEqual([
       ["⚡ 今すぐ", "21時〜", "22時〜", "23時〜"],
-      ["今日はパス", "⚙"],
+      ["回答を取り消す", "今日はパス", "⚙"],
     ]);
   });
 
   it("深夜のボタンは日付を付けない", () => {
     expect(labelsOf(lateRec, [], jst("2026-11-02T03:30:00"))).toEqual([
       ["⚡ 今すぐ", "3時〜", "4時〜", "5時〜"],
-      ["今日はパス", "⚙"],
+      ["回答を取り消す", "今日はパス", "⚙"],
     ]);
   });
 
@@ -143,11 +143,11 @@ describe("renderBoard（いつでも）", () => {
       ["☀️ 昼なら何時から？"],
       ["🌙 夜なら何時から？"],
       ["🌌 深夜なら何時から？"],
-      ["🙆 いつでもOK", "今日はパス", "⚙"],
+      ["🙆 いつでもOK", "回答を取り消す", "今日はパス", "⚙"],
     ]);
   });
 
-  it("セレクトには今すぐ、過ぎていない時刻、無理の順に選択肢を並べる", () => {
+  it("セレクトには今すぐと過ぎていない時刻だけを並べる", () => {
     const [morningRow, , , lateRow] = rowsOf(anyRec, [], morning);
     const options = (row: typeof morningRow) => {
       const select = row?.[0];
@@ -158,16 +158,15 @@ describe("renderBoard（いつでも）", () => {
       ["9時〜", "9"],
       ["10時〜", "10"],
       ["11時〜", "11"],
-      ["朝は無理", "none"],
     ]);
     expect(options(lateRow)[0]).toEqual(["0時〜（11/2）", "24"]);
   });
 
-  it("全時刻が過ぎた時間帯のセレクトは終了と出して押せなくする", () => {
-    const [morningRow] = rowsOf(anyRec, [], jst("2026-11-01T12:30:00"));
-    const select = morningRow?.[0];
-    expect(select?.type === ComponentType.StringSelect && select.placeholder).toBe("🌅 朝なら何時から？（終了）");
-    expect(select?.type === ComponentType.StringSelect && select.disabled).toBe(true);
+  it("全時刻が過ぎた時間帯のセレクトは出さず、出すセレクトには選択肢が 1 つ以上ある", () => {
+    const rows = rowsOf(anyRec, [], jst("2026-11-01T21:10:00"));
+    const selects = rows.flatMap((row) => row.flatMap((c) => (c.type === ComponentType.StringSelect ? [c] : [])));
+    expect(selects.map((s) => s.placeholder)).toEqual(["🌙 夜なら何時から？", "🌌 深夜なら何時から？"]);
+    for (const select of selects) expect(select.options.length).toBeGreaterThan(0);
   });
 
   it("そろえば時間帯名付きで最初にそろう時刻を出す", () => {
@@ -319,14 +318,15 @@ describe("renderBoard のメンション", () => {
 
   it.each([
     { rec: base, now: jst("2026-11-01T18:10:00") },
-    { rec: anyRec, now: jst("2026-11-01T17:00:00") },
+    // 朝から深夜まで 4 つのセレクトがすべて出る、部品数が最も多い時刻
+    { rec: anyRec, now: jst("2026-11-01T06:10:00") },
   ])("参加者が多くても部品数が 40 以下: $rec.scope", ({ rec, now }) => {
     const participants = Array.from({ length: 50 }, (_, i) => at(`u${i}`, night(21)));
     const board = renderBoard({ ...rec, max: null, notifyRoleId: "r1" }, participants, now);
     const count = (components: NonNullable<typeof board.components>): number =>
       components.reduce((n, c) => n + 1 + ("components" in c ? count(c.components as typeof components) : 0), 0);
     const total = count(board.components ?? []);
-    expect(total).toBe(20);
+    expect(total).toBe(21);
     expect(total).toBeLessThanOrEqual(40);
   });
 });

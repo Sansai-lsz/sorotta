@@ -1,4 +1,4 @@
-import type { SelectValue } from "../domain/answer.ts";
+import type { SelectValue, UndoTarget } from "../domain/answer.ts";
 import { isBucketKey, type BucketKey } from "../domain/buckets.ts";
 
 export type ComponentAction =
@@ -8,6 +8,8 @@ export type ComponentAction =
   | { kind: "anytime"; recruitmentId: string }
   | { kind: "pass"; recruitmentId: string }
   | { kind: "gear"; recruitmentId: string }
+  | { kind: "manageAnswers"; recruitmentId: string }
+  | { kind: "undo"; recruitmentId: string; target: UndoTarget }
   | { kind: "close"; recruitmentId: string }
   | { kind: "cancel"; recruitmentId: string };
 
@@ -18,6 +20,8 @@ const PREFIX = {
   anytime: "a",
   pass: "p",
   gear: "g",
+  manageAnswers: "m",
+  undo: "u",
   close: "c",
   cancel: "x",
 } as const satisfies Record<ComponentAction["kind"], string>;
@@ -32,6 +36,8 @@ export function encodeCustomId(action: ComponentAction): string {
     case "now":
     case "select":
       return `${head}:${action.bucket}`;
+    case "undo":
+      return `${head}:${action.target}`;
     default:
       return head;
   }
@@ -48,6 +54,8 @@ export function parseCustomId(customId: string): ComponentAction | null {
         return { kind: "pass", recruitmentId };
       case PREFIX.gear:
         return { kind: "gear", recruitmentId };
+      case PREFIX.manageAnswers:
+        return { kind: "manageAnswers", recruitmentId };
       case PREFIX.close:
         return { kind: "close", recruitmentId };
       case PREFIX.cancel:
@@ -57,6 +65,8 @@ export function parseCustomId(customId: string): ComponentAction | null {
     }
   }
   if (prefix === PREFIX.hour && NUMBER.test(arg)) return { kind: "hour", recruitmentId, hour: Number(arg) };
+  if (prefix === PREFIX.undo && (isBucketKey(arg) || arg === "anytime" || arg === "all"))
+    return { kind: "undo", recruitmentId, target: arg };
   if (!isBucketKey(arg)) return null;
   if (prefix === PREFIX.now) return { kind: "now", recruitmentId, bucket: arg };
   if (prefix === PREFIX.select) return { kind: "select", recruitmentId, bucket: arg };

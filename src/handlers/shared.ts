@@ -34,7 +34,7 @@ export async function notifyIfReady(
   }
 }
 
-export async function publishEndedBoard(env: Env, recruitmentId: string, now: Date): Promise<boolean> {
+export async function publishBoard(env: Env, recruitmentId: string, now: Date): Promise<boolean> {
   const snapshot = await readSnapshot(env.DB, recruitmentId);
   if (!snapshot) return false;
   const { rec, participants } = snapshot;

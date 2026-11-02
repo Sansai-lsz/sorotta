@@ -127,6 +127,16 @@ function answerStatements(db: D1Database, recruitmentId: string, userId: string,
       ];
     case "toggleAnytime":
       return [ensure, updateParticipant("anytime = 1 - anytime, passed = 0")];
+    case "clearAnytime":
+      return [ensure, updateParticipant("anytime = 0")];
+    case "clearAll":
+      return [
+        ensure,
+        updateParticipant("anytime = 0, passed = 0"),
+        db
+          .prepare(`DELETE FROM slots WHERE recruitment_id = ? AND user_id = ? AND ${WHILE_OPEN}`)
+          .bind(recruitmentId, userId, recruitmentId),
+      ];
     case "pass":
       return [
         ensure,

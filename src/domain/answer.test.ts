@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveAnswer } from "./answer.ts";
+import { resolveAnswer, resolveUndo } from "./answer.ts";
 
 const night = { scope: "night" } as const;
 const any = { scope: "any" } as const;
@@ -115,5 +115,21 @@ describe("resolveAnswer", () => {
 
   it("今日はパスはいつでも受け付ける", () => {
     expect(resolveAnswer({ kind: "pass" }, night, 29)).toEqual({ ok: true, op: { kind: "pass" } });
+  });
+});
+
+describe("resolveUndo", () => {
+  it("募集に含まれる時間帯だけを取り消す", () => {
+    expect(resolveUndo("night", night)).toEqual({ ok: true, op: { kind: "clear", bucket: "night" } });
+    expect(resolveUndo("noon", night).ok).toBe(false);
+  });
+
+  it("いつでもOK はいつでもの募集でだけ取り消す", () => {
+    expect(resolveUndo("anytime", any)).toEqual({ ok: true, op: { kind: "clearAnytime" } });
+    expect(resolveUndo("anytime", night).ok).toBe(false);
+  });
+
+  it("パスも全部取り消すで未回答に戻す", () => {
+    expect(resolveUndo("all", night)).toEqual({ ok: true, op: { kind: "clearAll" } });
   });
 });

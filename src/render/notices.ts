@@ -1,8 +1,14 @@
-import { ButtonStyle, ComponentType, type APIInteractionResponseCallbackData } from "discord-api-types/v10";
-import { bucketOf, shortHourLabel } from "../domain/buckets.ts";
+import {
+  ButtonStyle,
+  ComponentType,
+  MessageFlags,
+  type APIInteractionResponseCallbackData,
+} from "discord-api-types/v10";
+import { bucketOf, bucketsOf, hourLabel, shortHourLabel } from "../domain/buckets.ts";
+import type { UndoTarget } from "../domain/answer.ts";
 import { encodeCustomId } from "../discord/customId.ts";
 import type { Recruitment } from "../domain/recruitment.ts";
-import type { Ready } from "../domain/tally.ts";
+import type { Participant, Ready } from "../domain/tally.ts";
 import { button, mention, mentions } from "./shared.ts";
 
 export function renderReadyNotice(rec: Recruitment, ready: Ready): APIInteractionResponseCallbackData {
@@ -50,6 +56,55 @@ export function renderManagePanel(rec: Recruitment): APIInteractionResponseCallb
           button(ButtonStyle.Danger, "中止", encodeCustomId({ kind: "cancel", recruitmentId: rec.id })),
         ],
       },
+    ],
+    allowed_mentions: { parse: [] },
+  };
+}
+
+export function renderUndoPanel(
+  rec: Recruitment,
+  participant: Participant | undefined,
+): APIInteractionResponseCallbackData {
+  const text = (content: string) => ({ type: ComponentType.TextDisplay as const, content });
+  const section = (content: string, target: UndoTarget) => ({
+    type: ComponentType.Section as const,
+    components: [text(content)],
+    accessory: button(
+      ButtonStyle.Secondary,
+      "取り消す",
+      encodeCustomId({ kind: "undo", recruitmentId: rec.id, target }),
+    ),
+  });
+  const answers = participant?.passed
+    ? [section("今日はパス", "all")]
+    : [
+        ...bucketsOf(rec.scope).flatMap((bucket) => {
+          const slot = participant?.slots[bucket.key];
+          if (!slot) return [];
+          const label = rec.scope === "any" ? `${bucket.emoji} ${bucket.label}　` : "";
+          return [section(`${label}${hourLabel(slot.hour, rec.date)}${slot.now ? " ⚡今すぐ" : ""}`, bucket.key)];
+        }),
+        ...(participant?.anytime ? [section("🙆 いつでもOK", "anytime")] : []),
+      ];
+  return {
+    flags: MessageFlags.IsComponentsV2,
+    components: [
+      text("あなたの回答"),
+      ...(answers.length === 0 ? [text("まだ回答していません")] : answers),
+      ...(answers.length >= 2
+        ? [
+            {
+              type: ComponentType.ActionRow as const,
+              components: [
+                button(
+                  ButtonStyle.Secondary,
+                  "全部取り消す",
+                  encodeCustomId({ kind: "undo", recruitmentId: rec.id, target: "all" }),
+                ),
+              ],
+            },
+          ]
+        : []),
     ],
     allowed_mentions: { parse: [] },
   };

@@ -4,7 +4,7 @@ import {
   MessageFlags,
   type APIMessageComponentInteraction,
 } from "discord-api-types/v10";
-import { resolveAnswer, type AnswerAction, type AnswerResult } from "../domain/answer.ts";
+import { resolveAnswer, resolveUndo, type AnswerAction, type AnswerResult, type UndoTarget } from "../domain/answer.ts";
 import { hoursSinceDateStart } from "../domain/date.ts";
 import {
   applyAnswer,
@@ -18,8 +18,14 @@ import { createChannelMessage, editOriginal, ephemeralMessage, followUp, reply, 
 import { parseCustomId, parseSelectValue, type ComponentAction } from "../discord/customId.ts";
 import { cancelNoticeTargets } from "../domain/tally.ts";
 import { boardEditPayload } from "../render/board.ts";
-import { endedNotice, renderCancelNotice, renderFinishResult, renderManagePanel } from "../render/notices.ts";
-import { notifyIfReady, publishEndedBoard, runInBackground, userIdOf } from "./shared.ts";
+import {
+  endedNotice,
+  renderCancelNotice,
+  renderFinishResult,
+  renderManagePanel,
+  renderUndoPanel,
+} from "../render/notices.ts";
+import { notifyIfReady, publishBoard, runInBackground, userIdOf } from "./shared.ts";
 
 const UNUSABLE = "このボタンは使えません";
 
@@ -94,7 +100,7 @@ async function finishFromPanel(
     });
     return;
   }
-  const board = await publishEndedBoard(env, rec.id, new Date());
+  const board = await publishBoard(env, rec.id, new Date());
   let notice = true;
   if (status === "cancelled") {
     const targets = cancelNoticeTargets(rec, await listParticipants(env.DB, rec.id));
@@ -126,6 +132,79 @@ async function openManagePanel(
     type: InteractionResponseType.ChannelMessageWithSource,
     data: { ...renderManagePanel(rec), flags: MessageFlags.Ephemeral },
   });
+}
+
+async function openUndoPanel(
+  interaction: APIMessageComponentInteraction,
+  env: Env,
+  ctx: ExecutionContext,
+  recruitmentId: string,
+  userId: string,
+): Promise<Response> {
+  const snapshot = await readSnapshot(env.DB, recruitmentId);
+  if (!snapshot) return reply(UNUSABLE, { ephemeral: true });
+  const { rec, participants } = snapshot;
+  if (rec.messageId === null) {
+    runInBackground(ctx, "saveMessageId", saveMessageId(env.DB, rec.id, interaction.message.id));
+  }
+  if (rec.status !== "open") return reply(endedNotice(rec.status), { ephemeral: true });
+  return respond({
+    type: InteractionResponseType.ChannelMessageWithSource,
+    data: {
+      ...renderUndoPanel(
+        rec,
+        participants.find((p) => p.userId === userId),
+      ),
+      flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+    },
+  });
+}
+
+async function undoFromPanel(
+  interaction: APIMessageComponentInteraction,
+  env: Env,
+  recruitmentId: string,
+  userId: string,
+  target: UndoTarget,
+): Promise<void> {
+  const rec = await getRecruitment(env.DB, recruitmentId);
+  if (!rec) {
+    await editOriginal(env.DISCORD_APP_ID, interaction.token, {
+      components: [{ type: ComponentType.TextDisplay, content: UNUSABLE }],
+    });
+    return;
+  }
+  if (rec.status !== "open") {
+    await editOriginal(env.DISCORD_APP_ID, interaction.token, {
+      components: [{ type: ComponentType.TextDisplay, content: endedNotice(rec.status) }],
+    });
+    return;
+  }
+  const result = resolveUndo(target, rec);
+  if (!result.ok) {
+    await followUp(env.DISCORD_APP_ID, interaction.token, ephemeralMessage(UNUSABLE));
+    return;
+  }
+  await applyAnswer(env.DB, rec.id, userId, result.op);
+  const now = new Date();
+  const snapshot = await readSnapshot(env.DB, rec.id);
+  if (!snapshot) return;
+  await editOriginal(
+    env.DISCORD_APP_ID,
+    interaction.token,
+    snapshot.rec.status === "open"
+      ? renderUndoPanel(
+          snapshot.rec,
+          snapshot.participants.find((p) => p.userId === userId),
+        )
+      : { components: [{ type: ComponentType.TextDisplay, content: endedNotice(snapshot.rec.status) }] },
+  );
+  if (!(await publishBoard(env, rec.id, now))) {
+    await followUp(env.DISCORD_APP_ID, interaction.token, ephemeralMessage("盤面を書き換えられませんでした"));
+    return;
+  }
+  if (snapshot.rec.status === "open")
+    await notifyIfReady(env, interaction.token, snapshot.rec, snapshot.participants, now);
 }
 
 function toAnswerAction(
@@ -162,6 +241,17 @@ export async function handleComponent(
   switch (action.kind) {
     case "gear":
       return openManagePanel(interaction, env, ctx, action.recruitmentId, userId);
+    case "manageAnswers":
+      return openUndoPanel(interaction, env, ctx, action.recruitmentId, userId);
+    case "undo":
+      runComponentTask(
+        ctx,
+        env,
+        interaction,
+        "undoFromPanel",
+        undoFromPanel(interaction, env, action.recruitmentId, userId, action.target),
+      );
+      return respond({ type: InteractionResponseType.DeferredMessageUpdate });
     case "close":
     case "cancel":
       runComponentTask(

@@ -195,6 +195,7 @@ function outcomeLines(rec: Recruitment, outcome: Outcome): string[] {
 
 function footerButtons(rec: Recruitment): APIButtonComponent[] {
   return [
+    button(ButtonStyle.Secondary, "回答を取り消す", encodeCustomId({ kind: "manageAnswers", recruitmentId: rec.id })),
     button(ButtonStyle.Secondary, "今日はパス", encodeCustomId({ kind: "pass", recruitmentId: rec.id })),
     button(ButtonStyle.Secondary, "⚙", encodeCustomId({ kind: "gear", recruitmentId: rec.id })),
   ];
@@ -223,27 +224,29 @@ function singleControls(rec: Recruitment, bucket: Bucket, clock: number): Action
 }
 
 function anyControls(rec: Recruitment, clock: number): ActionRow[] {
-  const selects: ActionRow[] = BUCKETS.map((b) => {
+  // 時刻がすべて過ぎた時間帯は選択肢が 0 個になり、Discord が盤面ごと受け付けないので出さない
+  const selects: ActionRow[] = BUCKETS.flatMap((b) => {
     const open = openHours(b, clock);
+    if (open.length === 0) return [];
     const options: APISelectMenuOption[] = [];
     if (nowHourIn(b, clock) !== null) options.push({ label: "⚡ 今すぐ", value: encodeSelectValue({ kind: "now" }) });
     for (const hour of open)
       options.push({ label: hourLabel(hour, rec.date), value: encodeSelectValue({ kind: "hour", hour }) });
-    options.push({ label: `${b.label}は無理`, value: encodeSelectValue({ kind: "none" }) });
-    return {
-      type: ComponentType.ActionRow,
-      components: [
-        {
-          type: ComponentType.StringSelect,
-          custom_id: encodeCustomId({ kind: "select", recruitmentId: rec.id, bucket: b.key }),
-          placeholder: `${b.emoji} ${b.label}なら何時から？${open.length === 0 ? "（終了）" : ""}`,
-          options,
-          min_values: 1,
-          max_values: 1,
-          disabled: open.length === 0,
-        },
-      ],
-    };
+    return [
+      {
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.StringSelect,
+            custom_id: encodeCustomId({ kind: "select", recruitmentId: rec.id, bucket: b.key }),
+            placeholder: `${b.emoji} ${b.label}なら何時から？`,
+            options,
+            min_values: 1,
+            max_values: 1,
+          },
+        ],
+      },
+    ];
   });
   const buttons: APIButtonComponent[] = [
     button(ButtonStyle.Success, "🙆 いつでもOK", encodeCustomId({ kind: "anytime", recruitmentId: rec.id })),
