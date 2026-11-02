@@ -54,17 +54,3 @@ export function renderManagePanel(rec: Recruitment): APIInteractionResponseCallb
     allowed_mentions: { parse: [] },
   };
 }
-
-export function withRoleMention(
-  board: APIInteractionResponseCallbackData,
-  game: string,
-  roleId: string | null,
-): APIInteractionResponseCallbackData {
-  if (roleId === null) return board;
-  // 盤面の書き換えは content を送らないので、このメンションは最初の 1 回だけ届き、本文には残り続ける
-  return {
-    ...board,
-    content: `<@&${roleId}> ${game} の募集が出ました`,
-    allowed_mentions: { parse: [], roles: [roleId] },
-  };
-}

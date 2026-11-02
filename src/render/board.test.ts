@@ -1,16 +1,32 @@
-import { ComponentType } from "discord-api-types/v10";
+import { ComponentType, MessageFlags } from "discord-api-types/v10";
 import { describe, expect, it } from "vitest";
 import type { Recruitment } from "../domain/recruitment.ts";
 import type { Participant } from "../domain/tally.ts";
-import { gameLabel, renderBoard } from "./board.ts";
+import { boardEditPayload, boardInitialPayload, gameLabel, renderBoard } from "./board.ts";
 import { at, anyRec, base, jst, lateRec, night } from "./testData.ts";
 
 function descriptionOf(rec: Recruitment, participants: Participant[], now: Date): string {
-  return renderBoard(rec, participants, now).embeds?.[0]?.description ?? "";
+  return textDisplaysOf(rec, participants, now)[1] ?? "";
+}
+
+function containerOf(rec: Recruitment, participants: Participant[], now: Date) {
+  const container = renderBoard(rec, participants, now).components?.find((c) => c.type === ComponentType.Container);
+  if (container?.type !== ComponentType.Container) throw new Error("container missing");
+  return container;
+}
+
+function textDisplaysOf(rec: Recruitment, participants: Participant[], now: Date): string[] {
+  return containerOf(rec, participants, now).components.flatMap((c) =>
+    c.type === ComponentType.TextDisplay ? [c.content] : [],
+  );
+}
+
+function titleOf(rec: Recruitment, participants: Participant[], now: Date): string {
+  return textDisplaysOf(rec, participants, now)[0] ?? "";
 }
 
 function rowsOf(rec: Recruitment, participants: Participant[], now: Date) {
-  const components = renderBoard(rec, participants, now).components ?? [];
+  const components = containerOf(rec, participants, now).components;
   return components.flatMap((row) => (row.type === ComponentType.ActionRow ? [row.components] : []));
 }
 
@@ -30,7 +46,7 @@ describe("renderBoard（時間帯を 1 つ指定した募集）", () => {
   const evening = jst("2026-11-01T17:00:00");
 
   it("タイトルに日付と時間帯を出す", () => {
-    expect(renderBoard(base, [], evening).embeds?.[0]?.title).toBe("🎮 Apex やる人？ 11/1(日) 🌙夜");
+    expect(titleOf(base, [], evening)).toBe("### 🎮 Apex やる人？ 11/1(日) 🌙夜");
   });
 
   it("時刻ごとにその時刻から来る人を並べ、だれもいなければ － にする", () => {
@@ -86,9 +102,9 @@ describe("renderBoard（時間帯を 1 つ指定した募集）", () => {
   it("そろえば時間帯名なしで最初にそろう時刻を出す", () => {
     const description = descriptionOf(base, [at("a", night(20)), at("b", night(21)), at("c", night(22))], evening);
     expect(description).toContain("✅ **22時〜なら 3人そろう**");
-    expect(
-      renderBoard(base, [at("a", night(20)), at("b", night(21)), at("c", night(22))], evening).embeds?.[0]?.color,
-    ).toBe(0x57f287);
+    expect(containerOf(base, [at("a", night(20)), at("b", night(21)), at("c", night(22))], evening).accent_color).toBe(
+      0x57f287,
+    );
   });
 
   it("そろっていなければ残り人数を出し、パスした人も並べる", () => {
@@ -112,7 +128,7 @@ describe("renderBoard（いつでも）", () => {
       { userId: "x", passed: false, anytime: true, slots: {} },
     ];
     const description = descriptionOf(anyRec, participants, morning);
-    expect(renderBoard(anyRec, participants, morning).embeds?.[0]?.title).toBe("🎮 Apex やる人？ 11/1(日) いつでも");
+    expect(titleOf(anyRec, participants, morning)).toBe("### 🎮 Apex やる人？ 11/1(日) いつでも");
     expect(description).toContain("**🌅 朝**　－");
     expect(description).toContain("**🌙 夜**　<@b> 21時〜　<@a> 22時〜");
     expect(description).toContain("**🌌 深夜**　<@a> 1時〜（11/2）");
@@ -175,17 +191,14 @@ describe("renderBoard（終わった募集）", () => {
   const after = jst("2026-11-02T07:00:00");
 
   it("締め切ったらバッジを付け、ボタンを消し、通知した時刻の結果を残す", () => {
-    const board = renderBoard(
-      { ...base, status: "closed", notifiedSlot: { bucket: "night", hour: 20 } },
-      participants,
-      after,
-    );
-    expect(board.embeds?.[0]?.title).toBe("🎮 Apex やる人？ 11/1(日) 🌙夜 ［締め切り］");
-    expect(board.embeds?.[0]?.description).toContain("✅ **20時〜なら 3人そろう**");
-    expect(board.embeds?.[0]?.description).toContain("**18時〜**　<@a>");
-    expect(board.embeds?.[0]?.description).toMatch(/この募集は締め切られました$/);
-    expect(board.embeds?.[0]?.color).toBe(0x99aab5);
-    expect(board.components).toEqual([]);
+    const closed = { ...base, status: "closed" as const, notifiedSlot: { bucket: "night" as const, hour: 20 } };
+    const description = descriptionOf(closed, participants, after);
+    expect(titleOf(closed, participants, after)).toBe("### 🎮 Apex やる人？ 11/1(日) 🌙夜 ［締め切り］");
+    expect(description).toContain("✅ **20時〜なら 3人そろう**");
+    expect(description).toContain("**18時〜**　<@a>");
+    expect(description).toMatch(/この募集は締め切られました$/);
+    expect(containerOf(closed, participants, after).accent_color).toBe(0x99aab5);
+    expect(containerOf(closed, participants, after).components).toHaveLength(2);
   });
 
   it("そろう前に終わったらそろわなかったと出す", () => {
@@ -205,11 +218,12 @@ describe("renderBoard（終わった募集）", () => {
   });
 
   it("中止したらバッジと中止の文言を出す", () => {
-    const board = renderBoard({ ...base, status: "cancelled" }, participants, after);
-    expect(board.embeds?.[0]?.title).toBe("🎮 Apex やる人？ 11/1(日) 🌙夜 ［中止］");
-    expect(board.embeds?.[0]?.description).toContain("そろいませんでした");
-    expect(board.embeds?.[0]?.description).toMatch(/この募集は中止されました$/);
-    expect(board.components).toEqual([]);
+    const cancelled = { ...base, status: "cancelled" as const };
+    const description = descriptionOf(cancelled, participants, after);
+    expect(titleOf(cancelled, participants, after)).toBe("### 🎮 Apex やる人？ 11/1(日) 🌙夜 ［中止］");
+    expect(description).toContain("そろいませんでした");
+    expect(description).toMatch(/この募集は中止されました$/);
+    expect(containerOf(cancelled, participants, after).components).toHaveLength(2);
   });
 });
 
@@ -218,8 +232,56 @@ describe("renderBoard のメンション", () => {
     expect(renderBoard(base, [], jst("2026-11-01T17:00:00")).allowed_mentions).toEqual({ parse: [] });
   });
 
-  it("本文を持たないので、書き換えても最初のロールのメンションが残り、通知し直さない", () => {
+  it("ロールがあれば盤面の前にメンション行を置き、なければ置かない", () => {
+    const withRole = renderBoard({ ...base, notifyRoleId: "r1" }, [], jst("2026-11-01T17:00:00"));
+    expect(withRole.components?.[0]).toEqual({
+      type: ComponentType.TextDisplay,
+      content: "<@&r1> Apex の募集が出ました",
+    });
+    expect(renderBoard(base, [], jst("2026-11-01T17:00:00")).components?.[0]?.type).toBe(ComponentType.Container);
+  });
+
+  it("初回投稿だけ保存したロールへの通知を許可する", () => {
+    const now = jst("2026-11-01T17:00:00");
+    expect(boardInitialPayload({ ...base, notifyRoleId: "r1" }, [], now).allowed_mentions).toEqual({
+      parse: [],
+      roles: ["r1"],
+    });
+    expect(boardInitialPayload(base, [], now).allowed_mentions).toEqual({ parse: [] });
+    expect(boardEditPayload({ ...base, notifyRoleId: "r1" }, [], now).allowed_mentions).toEqual({ parse: [] });
+  });
+
+  it("V2 フラグを付け、本文と embed を持たない", () => {
+    const board = renderBoard(base, [], jst("2026-11-01T17:00:00"));
+    expect(board.flags).toBe(MessageFlags.IsComponentsV2);
+    expect(board.embeds).toBeUndefined();
     expect(renderBoard(base, [], jst("2026-11-01T17:00:00")).content).toBeUndefined();
+  });
+
+  it("旧盤面を書き換える payload は本文と embed を消す", () => {
+    expect(boardEditPayload(base, [], jst("2026-11-01T17:00:00"))).toMatchObject({
+      content: null,
+      embeds: [],
+      flags: MessageFlags.IsComponentsV2,
+    });
+  });
+
+  it("受付中と終了の色を出す", () => {
+    const now = jst("2026-11-01T17:00:00");
+    expect(containerOf(base, [], now).accent_color).toBe(0x5865f2);
+    expect(containerOf({ ...base, status: "closed" }, [], now).accent_color).toBe(0x99aab5);
+  });
+
+  it.each([
+    { rec: base, now: jst("2026-11-01T18:10:00") },
+    { rec: anyRec, now: jst("2026-11-01T17:00:00") },
+  ])("参加者が多くても部品数が 40 以下: $rec.scope", ({ rec, now }) => {
+    const participants = Array.from({ length: 50 }, (_, i) => at(`u${i}`, night(21)));
+    const board = renderBoard({ ...rec, max: null, notifyRoleId: "r1" }, participants, now);
+    const count = (components: NonNullable<typeof board.components>): number =>
+      components.reduce((n, c) => n + 1 + ("components" in c ? count(c.components as typeof components) : 0), 0);
+    expect(count(board.components ?? [])).toBe(16);
+    expect(count(board.components ?? [])).toBeLessThanOrEqual(40);
   });
 });
 

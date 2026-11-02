@@ -17,7 +17,7 @@ import {
 import { createChannelMessage, editOriginal, ephemeralMessage, followUp, reply, respond } from "../discord/api.ts";
 import { parseCustomId, parseSelectValue, type ComponentAction } from "../discord/customId.ts";
 import { cancelNoticeTargets } from "../domain/tally.ts";
-import { renderBoard } from "../render/board.ts";
+import { boardEditPayload } from "../render/board.ts";
 import { endedNotice, renderCancelNotice, renderFinishResult, renderManagePanel } from "../render/notices.ts";
 import { notifyIfReady, publishEndedBoard, runInBackground, userIdOf } from "./shared.ts";
 
@@ -64,7 +64,7 @@ async function updateBoard(
     await followUp(env.DISCORD_APP_ID, interaction.token, ephemeralMessage(UNUSABLE));
     return;
   }
-  await editOriginal(env.DISCORD_APP_ID, interaction.token, renderBoard(snapshot.rec, snapshot.participants, now));
+  await editOriginal(env.DISCORD_APP_ID, interaction.token, boardEditPayload(snapshot.rec, snapshot.participants, now));
 
   const refusal = !result.ok
     ? result.message

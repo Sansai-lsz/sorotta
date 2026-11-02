@@ -2,7 +2,7 @@ import { editChannelMessage, followUp } from "../discord/api.ts";
 import { markNotified, readSnapshot } from "../db/recruitments.ts";
 import type { Recruitment } from "../domain/recruitment.ts";
 import { tallyRecruitment, type Participant } from "../domain/tally.ts";
-import { renderBoard } from "../render/board.ts";
+import { boardEditPayload } from "../render/board.ts";
 import { renderReadyNotice } from "../render/notices.ts";
 
 export function userIdOf(interaction: {
@@ -42,5 +42,10 @@ export async function publishEndedBoard(env: Env, recruitmentId: string, now: Da
     console.error(`recruitment ${rec.id} has no message_id; board was not updated`);
     return false;
   }
-  return editChannelMessage(env.DISCORD_BOT_TOKEN, rec.channelId, rec.messageId, renderBoard(rec, participants, now));
+  return editChannelMessage(
+    env.DISCORD_BOT_TOKEN,
+    rec.channelId,
+    rec.messageId,
+    boardEditPayload(rec, participants, now),
+  );
 }

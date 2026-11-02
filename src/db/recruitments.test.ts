@@ -23,6 +23,7 @@ const rec: Recruitment = {
   date: "2026-11-01",
   scope: "any",
   hostId: "host",
+  notifyRoleId: null,
   status: "open",
   notifiedSlot: null,
 };
@@ -38,6 +39,13 @@ describe("db", () => {
   it("募集を作ると募集した人が参加者になる", async () => {
     expect(await getRecruitment(db, rec.id)).toEqual(rec);
     expect(await listParticipants(db, rec.id)).toEqual([{ userId: "host", passed: false, anytime: true, slots: {} }]);
+  });
+
+  it("募集の通知ロールを保存し、読み戻す", async () => {
+    const withRole = { ...rec, id: "101", notifyRoleId: "r1" };
+    await createRecruitment(db, withRole, { kind: "toggleAnytime" });
+    expect(await getRecruitment(db, withRole.id)).toEqual(withRole);
+    expect((await readSnapshot(db, withRole.id))?.rec.notifyRoleId).toBe("r1");
   });
 
   it("回答し直しても最初に回答した順を保つ", async () => {
@@ -137,6 +145,7 @@ describe("migration 0002", () => {
       INSERT INTO entries (recruitment_id, user_id, hour) VALUES ('1', 'a', 21);
     `);
     sqlite.exec(migration("0002_time_buckets.sql"));
+    sqlite.exec(migration("0004_recruitment_notify_role.sql"));
     const db = asD1(sqlite);
 
     expect(await getRecruitment(db, "1")).toEqual({
@@ -150,6 +159,7 @@ describe("migration 0002", () => {
       date: "2026-10-31",
       scope: "night",
       hostId: "host",
+      notifyRoleId: null,
       status: "closed",
       notifiedSlot: null,
     });

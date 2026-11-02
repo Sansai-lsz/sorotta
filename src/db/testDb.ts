@@ -75,5 +75,6 @@ export function openDatabase(): D1Database {
   sqlite.exec(migration("0001_init.sql"));
   sqlite.exec(migration("0002_time_buckets.sql"));
   sqlite.exec(migration("0003_notify_role.sql"));
+  sqlite.exec(migration("0004_recruitment_notify_role.sql"));
   return asD1(sqlite);
 }

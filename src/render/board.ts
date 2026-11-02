@@ -2,11 +2,12 @@ import {
   ComponentType,
   type APIActionRowComponent,
   type APIComponentInMessageActionRow,
-  type APIEmbed,
   type APIInteractionResponseCallbackData,
   type APISelectMenuOption,
   ButtonStyle,
   type APIButtonComponent,
+  MessageFlags,
+  type RESTPatchAPIChannelMessageJSONBody,
 } from "discord-api-types/v10";
 import {
   BUCKETS,
@@ -101,17 +102,55 @@ export function renderBoard(
 
   const when = scope === "any" ? "いつでも" : `${bucketOf(scope).emoji}${bucketOf(scope).label}`;
   const badge = rec.status === "closed" ? " ［締め切り］" : rec.status === "cancelled" ? " ［中止］" : "";
-  const embed: APIEmbed = {
-    title: `🎮 ${rec.game} やる人？ ${formatDate(rec.date)} ${when}${badge}`,
-    description: lines.join("\n"),
-    color: ended ? COLOR_ENDED : t.outcome.kind === "ready" ? COLOR_READY : COLOR_OPEN,
-  };
-
-  const components =
+  const controls =
     clock === null ? [] : scope === "any" ? anyControls(rec, clock) : singleControls(rec, bucketOf(scope), clock);
 
   // 一覧のメンションは名前表示のためだけに使う。押すたびに全員へ通知が飛ばないよう抑止する
-  return { embeds: [embed], components, allowed_mentions: { parse: [] } };
+  return {
+    flags: MessageFlags.IsComponentsV2,
+    allowed_mentions: { parse: [] },
+    components: [
+      ...(rec.notifyRoleId === null
+        ? []
+        : [
+            {
+              type: ComponentType.TextDisplay as const,
+              content: `<@&${rec.notifyRoleId}> ${rec.game} の募集が出ました`,
+            },
+          ]),
+      {
+        type: ComponentType.Container,
+        accent_color: ended ? COLOR_ENDED : t.outcome.kind === "ready" ? COLOR_READY : COLOR_OPEN,
+        components: [
+          {
+            type: ComponentType.TextDisplay,
+            content: `### 🎮 ${rec.game} やる人？ ${formatDate(rec.date)} ${when}${badge}`,
+          },
+          { type: ComponentType.TextDisplay, content: lines.join("\n") },
+          ...controls,
+        ],
+      },
+    ],
+  };
+}
+
+export function boardEditPayload(
+  rec: Recruitment,
+  participants: Participant[],
+  now: Date,
+): RESTPatchAPIChannelMessageJSONBody {
+  return { ...renderBoard(rec, participants, now), content: null, embeds: [] };
+}
+
+export function boardInitialPayload(
+  rec: Recruitment,
+  participants: Participant[],
+  now: Date,
+): APIInteractionResponseCallbackData {
+  return {
+    ...renderBoard(rec, participants, now),
+    allowed_mentions: rec.notifyRoleId === null ? { parse: [] } : { parse: [], roles: [rec.notifyRoleId] },
+  };
 }
 
 function outcomeLines(rec: Recruitment, outcome: Outcome): string[] {

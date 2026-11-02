@@ -54,7 +54,7 @@ async function callApi(
 }
 
 // interaction token で叩く webhook は bot token なしで使える。15 分有効
-export function editOriginal(appId: string, token: string, body: APIInteractionResponseCallbackData): Promise<boolean> {
+export function editOriginal(appId: string, token: string, body: RESTPatchAPIChannelMessageJSONBody): Promise<boolean> {
   return callApi("PATCH", webhook(appId, token, "/messages/@original"), body);
 }
 

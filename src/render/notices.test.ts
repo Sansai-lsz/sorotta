@@ -1,31 +1,13 @@
 import { ComponentType } from "discord-api-types/v10";
 import { describe, expect, it } from "vitest";
-import { renderBoard } from "./board.ts";
 import {
   endedNotice,
   renderCancelNotice,
   renderFinishResult,
   renderManagePanel,
   renderReadyNotice,
-  withRoleMention,
 } from "./notices.ts";
-import { anyRec, base, jst } from "./testData.ts";
-
-describe("withRoleMention", () => {
-  const board = renderBoard(base, [], jst("2026-11-01T17:00:00"));
-
-  it("本文でロールにメンションし、そのロールにだけ通知を許す", () => {
-    const withRole = withRoleMention(board, "Apex", "r1");
-    expect(withRole.content).toBe("<@&r1> Apex の募集が出ました");
-    expect(withRole.allowed_mentions).toEqual({ parse: [], roles: ["r1"] });
-    expect(withRole.embeds).toEqual(board.embeds);
-    expect(withRole.components).toEqual(board.components);
-  });
-
-  it("ロールがなければ投稿を変えない", () => {
-    expect(withRoleMention(board, "Apex", null)).toBe(board);
-  });
-});
+import { anyRec, base } from "./testData.ts";
 
 describe("renderReadyNotice", () => {
   it("そろったメンバーだけにメンションする", () => {
