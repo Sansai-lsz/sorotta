@@ -1,5 +1,4 @@
-import type { APIMessageComponentInteraction } from "discord-api-types/v10";
-import { followUp, ephemeralMessage, editChannelMessage } from "../discord/api.ts";
+import { editChannelMessage, followUp } from "../discord/api.ts";
 import { markNotified, readSnapshot } from "../db/recruitments.ts";
 import type { Recruitment } from "../domain/recruitment.ts";
 import { tallyRecruitment, type Participant } from "../domain/tally.ts";
@@ -17,21 +16,6 @@ export function runInBackground(ctx: ExecutionContext, label: string, task: Prom
   ctx.waitUntil(
     task.catch((err: unknown) => {
       console.error(`${label} failed`, err);
-    }),
-  );
-}
-
-export function runComponentTask(
-  ctx: ExecutionContext,
-  env: Env,
-  interaction: APIMessageComponentInteraction,
-  label: string,
-  task: Promise<void>,
-): void {
-  ctx.waitUntil(
-    task.catch(async (err: unknown) => {
-      console.error(`${label} failed`, err);
-      await followUp(env.DISCORD_APP_ID, interaction.token, ephemeralMessage("処理に失敗しました"));
     }),
   );
 }

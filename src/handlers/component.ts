@@ -19,9 +19,24 @@ import { parseCustomId, parseSelectValue, type ComponentAction } from "../discor
 import { cancelNoticeTargets } from "../domain/tally.ts";
 import { renderBoard } from "../render/board.ts";
 import { endedNotice, renderCancelNotice, renderFinishResult, renderManagePanel } from "../render/notices.ts";
-import { notifyIfReady, publishEndedBoard, runComponentTask, runInBackground, userIdOf } from "./shared.ts";
+import { notifyIfReady, publishEndedBoard, runInBackground, userIdOf } from "./shared.ts";
 
 const UNUSABLE = "このボタンは使えません";
+
+function runComponentTask(
+  ctx: ExecutionContext,
+  env: Env,
+  interaction: APIMessageComponentInteraction,
+  label: string,
+  task: Promise<void>,
+): void {
+  ctx.waitUntil(
+    task.catch(async (err: unknown) => {
+      console.error(`${label} failed`, err);
+      await followUp(env.DISCORD_APP_ID, interaction.token, ephemeralMessage("処理に失敗しました"));
+    }),
+  );
+}
 
 async function updateBoard(
   interaction: APIMessageComponentInteraction,
