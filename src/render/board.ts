@@ -4,6 +4,7 @@ import {
   type APIComponentInMessageActionRow,
   type APIInteractionResponseCallbackData,
   type APISelectMenuOption,
+  type APITextDisplayComponent,
   ButtonStyle,
   type APIButtonComponent,
   MessageFlags,
@@ -104,23 +105,21 @@ export function renderBoard(
   const badge = rec.status === "closed" ? " ［締め切り］" : rec.status === "cancelled" ? " ［中止］" : "";
   const controls =
     clock === null ? [] : scope === "any" ? anyControls(rec, clock) : singleControls(rec, bucketOf(scope), clock);
+  // 書き換えのたびに同じ行を描き直せるよう、ロールの行は募集に保存したロールから毎回作る
+  const roleLine: APITextDisplayComponent[] =
+    rec.notifyRoleId === null
+      ? []
+      : [{ type: ComponentType.TextDisplay, content: `<@&${rec.notifyRoleId}> ${rec.game} の募集が出ました` }];
 
   // 一覧のメンションは名前表示のためだけに使う。押すたびに全員へ通知が飛ばないよう抑止する
   return {
     flags: MessageFlags.IsComponentsV2,
     allowed_mentions: { parse: [] },
     components: [
-      ...(rec.notifyRoleId === null
-        ? []
-        : [
-            {
-              type: ComponentType.TextDisplay as const,
-              content: `<@&${rec.notifyRoleId}> ${rec.game} の募集が出ました`,
-            },
-          ]),
+      ...roleLine,
       {
         type: ComponentType.Container,
-        accent_color: ended ? COLOR_ENDED : t.outcome.kind === "ready" ? COLOR_READY : COLOR_OPEN,
+        accent_color: accentColor(ended, t.outcome),
         components: [
           {
             type: ComponentType.TextDisplay,
@@ -134,14 +133,7 @@ export function renderBoard(
   };
 }
 
-export function boardEditPayload(
-  rec: Recruitment,
-  participants: Participant[],
-  now: Date,
-): RESTPatchAPIChannelMessageJSONBody {
-  return { ...renderBoard(rec, participants, now), content: null, embeds: [] };
-}
-
+// ロールへの通知は最初の投稿でだけ許す。書き換えのたびにロール全員へ通知が飛ばないようにする
 export function boardInitialPayload(
   rec: Recruitment,
   participants: Participant[],
@@ -151,6 +143,21 @@ export function boardInitialPayload(
     ...renderBoard(rec, participants, now),
     allowed_mentions: rec.notifyRoleId === null ? { parse: [] } : { parse: [], roles: [rec.notifyRoleId] },
   };
+}
+
+// V2 フラグなしで出した旧盤面は content と embeds を空にしないと V2 に切り替えられない
+export function boardEditPayload(
+  rec: Recruitment,
+  participants: Participant[],
+  now: Date,
+): RESTPatchAPIChannelMessageJSONBody {
+  return { ...renderBoard(rec, participants, now), content: null, embeds: [] };
+}
+
+function accentColor(ended: boolean, outcome: Outcome): number {
+  if (ended) return COLOR_ENDED;
+  if (outcome.kind === "ready") return COLOR_READY;
+  return COLOR_OPEN;
 }
 
 function outcomeLines(rec: Recruitment, outcome: Outcome): string[] {

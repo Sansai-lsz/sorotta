@@ -100,11 +100,9 @@ describe("renderBoard（時間帯を 1 つ指定した募集）", () => {
   });
 
   it("そろえば時間帯名なしで最初にそろう時刻を出す", () => {
-    const description = descriptionOf(base, [at("a", night(20)), at("b", night(21)), at("c", night(22))], evening);
-    expect(description).toContain("✅ **22時〜なら 3人そろう**");
-    expect(containerOf(base, [at("a", night(20)), at("b", night(21)), at("c", night(22))], evening).accent_color).toBe(
-      0x57f287,
-    );
+    const participants = [at("a", night(20)), at("b", night(21)), at("c", night(22))];
+    expect(descriptionOf(base, participants, evening)).toContain("✅ **22時〜なら 3人そろう**");
+    expect(containerOf(base, participants, evening).accent_color).toBe(0x57f287);
   });
 
   it("そろっていなければ残り人数を出し、パスした人も並べる", () => {
@@ -228,38 +226,39 @@ describe("renderBoard（終わった募集）", () => {
 });
 
 describe("renderBoard のメンション", () => {
+  const evening = jst("2026-11-01T17:00:00");
+
   it("一覧のメンションでは誰にも通知しない", () => {
-    expect(renderBoard(base, [], jst("2026-11-01T17:00:00")).allowed_mentions).toEqual({ parse: [] });
+    expect(renderBoard(base, [], evening).allowed_mentions).toEqual({ parse: [] });
   });
 
   it("ロールがあれば盤面の前にメンション行を置き、なければ置かない", () => {
-    const withRole = renderBoard({ ...base, notifyRoleId: "r1" }, [], jst("2026-11-01T17:00:00"));
+    const withRole = renderBoard({ ...base, notifyRoleId: "r1" }, [], evening);
     expect(withRole.components?.[0]).toEqual({
       type: ComponentType.TextDisplay,
       content: "<@&r1> Apex の募集が出ました",
     });
-    expect(renderBoard(base, [], jst("2026-11-01T17:00:00")).components?.[0]?.type).toBe(ComponentType.Container);
+    expect(renderBoard(base, [], evening).components?.[0]?.type).toBe(ComponentType.Container);
   });
 
   it("初回投稿だけ保存したロールへの通知を許可する", () => {
-    const now = jst("2026-11-01T17:00:00");
-    expect(boardInitialPayload({ ...base, notifyRoleId: "r1" }, [], now).allowed_mentions).toEqual({
+    expect(boardInitialPayload({ ...base, notifyRoleId: "r1" }, [], evening).allowed_mentions).toEqual({
       parse: [],
       roles: ["r1"],
     });
-    expect(boardInitialPayload(base, [], now).allowed_mentions).toEqual({ parse: [] });
-    expect(boardEditPayload({ ...base, notifyRoleId: "r1" }, [], now).allowed_mentions).toEqual({ parse: [] });
+    expect(boardInitialPayload(base, [], evening).allowed_mentions).toEqual({ parse: [] });
+    expect(boardEditPayload({ ...base, notifyRoleId: "r1" }, [], evening).allowed_mentions).toEqual({ parse: [] });
   });
 
   it("V2 フラグを付け、本文と embed を持たない", () => {
-    const board = renderBoard(base, [], jst("2026-11-01T17:00:00"));
+    const board = renderBoard(base, [], evening);
     expect(board.flags).toBe(MessageFlags.IsComponentsV2);
     expect(board.embeds).toBeUndefined();
-    expect(renderBoard(base, [], jst("2026-11-01T17:00:00")).content).toBeUndefined();
+    expect(board.content).toBeUndefined();
   });
 
   it("旧盤面を書き換える payload は本文と embed を消す", () => {
-    expect(boardEditPayload(base, [], jst("2026-11-01T17:00:00"))).toMatchObject({
+    expect(boardEditPayload(base, [], evening)).toMatchObject({
       content: null,
       embeds: [],
       flags: MessageFlags.IsComponentsV2,
@@ -267,9 +266,8 @@ describe("renderBoard のメンション", () => {
   });
 
   it("受付中と終了の色を出す", () => {
-    const now = jst("2026-11-01T17:00:00");
-    expect(containerOf(base, [], now).accent_color).toBe(0x5865f2);
-    expect(containerOf({ ...base, status: "closed" }, [], now).accent_color).toBe(0x99aab5);
+    expect(containerOf(base, [], evening).accent_color).toBe(0x5865f2);
+    expect(containerOf({ ...base, status: "closed" }, [], evening).accent_color).toBe(0x99aab5);
   });
 
   it.each([
@@ -280,8 +278,9 @@ describe("renderBoard のメンション", () => {
     const board = renderBoard({ ...rec, max: null, notifyRoleId: "r1" }, participants, now);
     const count = (components: NonNullable<typeof board.components>): number =>
       components.reduce((n, c) => n + 1 + ("components" in c ? count(c.components as typeof components) : 0), 0);
-    expect(count(board.components ?? [])).toBe(16);
-    expect(count(board.components ?? [])).toBeLessThanOrEqual(40);
+    const total = count(board.components ?? []);
+    expect(total).toBe(16);
+    expect(total).toBeLessThanOrEqual(40);
   });
 });
 
