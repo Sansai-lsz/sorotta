@@ -5,6 +5,7 @@ import {
   type APIInteractionResponseCallbackData,
   type APISelectMenuOption,
   type APISeparatorComponent,
+  type APISectionComponent,
   type APITextDisplayComponent,
   ButtonStyle,
   type APIButtonComponent,
@@ -73,11 +74,11 @@ export function renderBoard(
   const chip = (userId: string, slot: Slot | undefined) =>
     [mention(userId), ...(slot?.now ? ["⚡今すぐ"] : []), ...(reserves.has(userId) ? ["補欠"] : [])].join(" ");
   const row = (label: string, struck: boolean, people: string[], separator: string) =>
-    `${struck ? `~~${label}~~` : `**${label}**`}　${people.length > 0 ? people.join(separator) : "－"}`;
+    `${struck ? `~~${label}~~` : `**${label}**`}　${people.join(separator)}`;
 
   const rows =
     scope === "any"
-      ? BUCKETS.map((b) => {
+      ? BUCKETS.flatMap((b) => {
           const here = answered
             .flatMap((p) => {
               const slot = p.slots[b.key];
@@ -85,21 +86,22 @@ export function renderBoard(
             })
             .sort((x, y) => x.slot.hour - y.slot.hour);
           const people = here.map(({ userId, slot }) => `${chip(userId, slot)} ${hourLabel(slot.hour, rec.date)}`);
-          return row(`${b.emoji} ${b.label}`, b.hours.every(over), people, "　");
+          return people.length > 0 ? [row(`${b.emoji} ${b.label}`, b.hours.every(over), people, "　")] : [];
         })
-      : bucketOf(scope).hours.map((hour) => {
+      : bucketOf(scope).hours.flatMap((hour) => {
           const people = answered.flatMap((p) => {
             const slot = p.slots[scope];
             return slot?.hour === hour ? [chip(p.userId, slot)] : [];
           });
-          return row(hourLabel(hour, rec.date), over(hour), people, " ");
+          return people.length > 0 ? [row(hourLabel(hour, rec.date), over(hour), people, " ")] : [];
         });
   if (scope === "any" && t.anytime.length > 0) {
     rows.push(`**🙆 いつでも**　${t.anytime.map((userId) => chip(userId, undefined)).join(" ")}`);
   }
 
   const resultLines = outcomeLines(rec, t.outcome);
-  if (t.passed.length > 0) resultLines.push(`パス: ${mentions(t.passed)}`);
+  if (t.passed.length > 0) rows.push(`パス: ${mentions(t.passed)}`);
+  if (rows.length === 0) rows.push("まだ誰も回答していません");
   if (ended)
     resultLines.push("", rec.status === "cancelled" ? "この募集は中止されました" : "この募集は締め切られました");
 
@@ -107,6 +109,12 @@ export function renderBoard(
   const badge = rec.status === "closed" ? " ［締め切り］" : rec.status === "cancelled" ? " ［中止］" : "";
   const controls =
     clock === null ? [] : scope === "any" ? anyControls(rec, clock) : singleControls(rec, bucketOf(scope), clock);
+  const heading: APITextDisplayComponent = {
+    type: ComponentType.TextDisplay,
+    content: `### 🎮 ${rec.game} やる人？ ${formatDate(rec.date)} ${when}${badge}\n募集: ${mention(rec.hostId)}（${playersLabel(rec.min, rec.max)}）`,
+  };
+  const headingBlock: APISectionComponent | APITextDisplayComponent =
+    controls.length > 0 ? { type: ComponentType.Section, components: [heading], accessory: gearButton(rec) } : heading;
   const separator: APISeparatorComponent = {
     type: ComponentType.Separator,
     divider: true,
@@ -128,14 +136,11 @@ export function renderBoard(
         type: ComponentType.Container,
         accent_color: accentColor(ended, t.outcome),
         components: [
-          {
-            type: ComponentType.TextDisplay,
-            content: `### 🎮 ${rec.game} やる人？ ${formatDate(rec.date)} ${when}${badge}\n募集: ${mention(rec.hostId)}（${playersLabel(rec.min, rec.max)}）`,
-          },
-          separator,
-          { type: ComponentType.TextDisplay, content: rows.join("\n") },
+          headingBlock,
           separator,
           { type: ComponentType.TextDisplay, content: resultLines.join("\n") },
+          separator,
+          { type: ComponentType.TextDisplay, content: rows.join("\n") },
           ...(controls.length > 0 ? [separator] : []),
           ...controls,
         ],
@@ -187,7 +192,7 @@ function outcomeLines(rec: Recruitment, outcome: Outcome): string[] {
       return lines;
     }
     case "short":
-      return [`あと ${outcome.missing}人`];
+      return [`**あと ${outcome.missing}人**`];
     case "missed":
       return ["そろいませんでした"];
   }
@@ -197,8 +202,11 @@ function footerButtons(rec: Recruitment): APIButtonComponent[] {
   return [
     button(ButtonStyle.Secondary, "回答を取り消す", encodeCustomId({ kind: "manageAnswers", recruitmentId: rec.id })),
     button(ButtonStyle.Secondary, "今日はパス", encodeCustomId({ kind: "pass", recruitmentId: rec.id })),
-    button(ButtonStyle.Secondary, "⚙", encodeCustomId({ kind: "gear", recruitmentId: rec.id })),
   ];
+}
+
+function gearButton(rec: Recruitment): APIButtonComponent {
+  return button(ButtonStyle.Secondary, "⚙", encodeCustomId({ kind: "gear", recruitmentId: rec.id }));
 }
 
 function singleControls(rec: Recruitment, bucket: Bucket, clock: number): ActionRow[] {

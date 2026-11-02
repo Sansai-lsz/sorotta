@@ -17,7 +17,11 @@ function containerOf(rec: Recruitment, participants: Participant[], now: Date) {
 
 function textDisplaysOf(rec: Recruitment, participants: Participant[], now: Date): string[] {
   return containerOf(rec, participants, now).components.flatMap((c) =>
-    c.type === ComponentType.TextDisplay ? [c.content] : [],
+    c.type === ComponentType.TextDisplay
+      ? [c.content]
+      : c.type === ComponentType.Section
+        ? c.components.map((item) => item.content)
+        : [],
   );
 }
 
@@ -49,10 +53,10 @@ describe("renderBoard（時間帯を 1 つ指定した募集）", () => {
     expect(titleOf(base, [], evening)).toBe("### 🎮 Apex やる人？ 11/1(日) 🌙夜");
   });
 
-  it("時刻ごとにその時刻から来る人を並べ、だれもいなければ － にする", () => {
+  it("回答がある時刻だけ、その時刻から来る人を並べる", () => {
     const description = descriptionOf(base, [at("a", night(21)), at("b", night(21)), at("c", night(22))], evening);
     expect(description).toContain("募集: <@host>（3人〜・定員3人）");
-    expect(description).toContain("**18時〜**　－");
+    expect(description).not.toContain("18時〜");
     expect(description).toContain("**21時〜**　<@a> <@b>");
     expect(description).toContain("**22時〜**　<@c>");
   });
@@ -70,32 +74,32 @@ describe("renderBoard（時間帯を 1 つ指定した募集）", () => {
   it("深夜の時刻には翌日の日付を付ける", () => {
     const description = descriptionOf(lateRec, [at("a", { late: { hour: 24, now: false } })], evening);
     expect(description).toContain("**0時〜（11/2）**　<@a>");
-    expect(description).toContain("**5時〜（11/2）**　－");
+    expect(description).not.toContain("5時〜（11/2）");
   });
 
   it("過ぎた時刻には打ち消し線を引く", () => {
     const description = descriptionOf(base, [at("a", night(18))], jst("2026-11-01T20:30:00"));
     expect(description).toContain("~~18時〜~~　<@a>");
-    expect(description).toContain("~~19時〜~~　－");
-    expect(description).toContain("**20時〜**　－");
+    expect(description).not.toContain("19時〜");
+    expect(description).not.toContain("20時〜");
   });
 
-  it("過ぎていない時刻だけをボタンにして 5 個で折り返し、最後の行にパスと ⚙ を置く", () => {
+  it("過ぎていない時刻だけをボタンにして 5 個で折り返し、最後の行に取り消しとパスを置く", () => {
     expect(labelsOf(base, [], evening)).toEqual([
       ["18時〜", "19時〜", "20時〜", "21時〜", "22時〜"],
       ["23時〜"],
-      ["回答を取り消す", "今日はパス", "⚙"],
+      ["回答を取り消す", "今日はパス"],
     ]);
     expect(labelsOf(base, [], jst("2026-11-01T21:30:00"))).toEqual([
       ["⚡ 今すぐ", "21時〜", "22時〜", "23時〜"],
-      ["回答を取り消す", "今日はパス", "⚙"],
+      ["回答を取り消す", "今日はパス"],
     ]);
   });
 
   it("深夜のボタンは日付を付けない", () => {
     expect(labelsOf(lateRec, [], jst("2026-11-02T03:30:00"))).toEqual([
       ["⚡ 今すぐ", "3時〜", "4時〜", "5時〜"],
-      ["回答を取り消す", "今日はパス", "⚙"],
+      ["回答を取り消す", "今日はパス"],
     ]);
   });
 
@@ -107,7 +111,7 @@ describe("renderBoard（時間帯を 1 つ指定した募集）", () => {
 
   it("そろっていなければ残り人数を出し、パスした人も並べる", () => {
     const description = descriptionOf(base, [at("a", night(21)), { userId: "d", passed: true }], evening);
-    expect(description).toContain("あと 2人");
+    expect(description).toContain("**あと 2人**");
     expect(description).toContain("パス: <@d>");
   });
 
@@ -127,14 +131,16 @@ describe("renderBoard（いつでも）", () => {
     ];
     const description = descriptionOf(anyRec, participants, morning);
     expect(titleOf(anyRec, participants, morning)).toBe("### 🎮 Apex やる人？ 11/1(日) いつでも");
-    expect(description).toContain("**🌅 朝**　－");
+    expect(description).not.toContain("🌅 朝");
     expect(description).toContain("**🌙 夜**　<@b> 21時〜　<@a> 22時〜");
     expect(description).toContain("**🌌 深夜**　<@a> 1時〜（11/2）");
     expect(description).toContain("**🙆 いつでも**　<@x>");
   });
 
-  it("全時刻が過ぎた時間帯のラベルに打ち消し線を引く", () => {
-    expect(descriptionOf(anyRec, [], jst("2026-11-01T12:30:00"))).toContain("~~🌅 朝~~　－");
+  it("全時刻が過ぎた時間帯でも回答があればラベルに打ち消し線を引く", () => {
+    expect(
+      descriptionOf(anyRec, [at("a", { morning: { hour: 9, now: false } })], jst("2026-11-01T12:30:00")),
+    ).toContain("~~🌅 朝~~　<@a> 9時〜");
   });
 
   it("時間帯ごとのセレクト 4 行とボタン 1 行を出す", () => {
@@ -143,7 +149,7 @@ describe("renderBoard（いつでも）", () => {
       ["☀️ 昼なら何時から？"],
       ["🌙 夜なら何時から？"],
       ["🌌 深夜なら何時から？"],
-      ["🙆 いつでもOK", "回答を取り消す", "今日はパス", "⚙"],
+      ["🙆 いつでもOK", "回答を取り消す", "今日はパス"],
     ]);
   });
 
@@ -193,9 +199,14 @@ describe("renderBoard（終わった募集）", () => {
     expect(titleOf(closed, participants, after)).toBe("### 🎮 Apex やる人？ 11/1(日) 🌙夜 ［締め切り］");
     expect(description).toContain("✅ **20時〜なら 3人そろう**");
     expect(description).toContain("**18時〜**　<@a>");
-    expect(description).toMatch(/この募集は締め切られました$/);
+    expect(textDisplaysOf(closed, participants, after)[1]).toMatch(/この募集は締め切られました$/);
     expect(containerOf(closed, participants, after).accent_color).toBe(0x99aab5);
     expect(containerOf(closed, participants, after).components).toHaveLength(5);
+    expect(containerOf(closed, participants, after).components[0]?.type).toBe(ComponentType.TextDisplay);
+    expect(containerOf(closed, participants, after).components.some((c) => c.type === ComponentType.Section)).toBe(
+      false,
+    );
+    expect(rowsOf(closed, participants, after)).toEqual([]);
   });
 
   it("そろう前に終わったらそろわなかったと出す", () => {
@@ -219,7 +230,7 @@ describe("renderBoard（終わった募集）", () => {
     const description = descriptionOf(cancelled, participants, after);
     expect(titleOf(cancelled, participants, after)).toBe("### 🎮 Apex やる人？ 11/1(日) 🌙夜 ［中止］");
     expect(description).toContain("そろいませんでした");
-    expect(description).toMatch(/この募集は中止されました$/);
+    expect(textDisplaysOf(cancelled, participants, after)[1]).toMatch(/この募集は中止されました$/);
     expect(containerOf(cancelled, participants, after).components).toHaveLength(5);
   });
 });
@@ -237,7 +248,7 @@ describe("renderBoard のメンション", () => {
     };
 
     expect(openComponents.map((component) => component.type)).toEqual([
-      ComponentType.TextDisplay,
+      ComponentType.Section,
       ComponentType.Separator,
       ComponentType.TextDisplay,
       ComponentType.Separator,
@@ -263,11 +274,38 @@ describe("renderBoard のメンション", () => {
       separator,
       separator,
     ]);
-    const [heading, answers, result] = textDisplaysOf(base, [], evening);
+    const [heading, result, answers] = textDisplaysOf(base, [], evening);
     expect(heading).toBe("### 🎮 Apex やる人？ 11/1(日) 🌙夜\n募集: <@host>（3人〜・定員3人）");
-    expect(answers).toMatch(/^\*\*18時〜\*\*　－/);
-    expect(answers).toMatch(/\*\*23時〜\*\*　－$/);
-    expect(result).toBe("あと 3人");
+    expect(result).toBe("**あと 3人**");
+    expect(answers).toBe("まだ誰も回答していません");
+  });
+
+  it("受付中は見出しの Section に ⚙ を置き、下の操作行から外す", () => {
+    const components = containerOf(base, [], evening).components;
+    const heading = components[0];
+    expect(heading?.type).toBe(ComponentType.Section);
+    if (heading?.type !== ComponentType.Section) throw new Error("section missing");
+    expect(heading.accessory).toMatchObject({
+      type: ComponentType.Button,
+      style: 2,
+      label: "⚙",
+      custom_id: "g:123",
+    });
+    expect(labelsOf(base, [], evening).flat()).not.toContain("⚙");
+  });
+
+  it("結果を一覧より前に置き、パスは一覧の末尾に置く", () => {
+    const contents = textDisplaysOf(base, [at("a", night(21)), { userId: "d", passed: true }], evening);
+    expect(contents[1]).toBe("**あと 2人**");
+    expect(contents[2]).toBe("**21時〜**　<@a>\nパス: <@d>");
+  });
+
+  it("回答もパスもなければ一覧に案内だけを出す", () => {
+    expect(textDisplaysOf(base, [], evening)[2]).toBe("まだ誰も回答していません");
+  });
+
+  it("パスだけなら案内を出さず、一覧にパスを出す", () => {
+    expect(textDisplaysOf(base, [{ userId: "d", passed: true }], evening)[2]).toBe("パス: <@d>");
   });
 
   it("一覧のメンションでは誰にも通知しない", () => {
@@ -324,10 +362,22 @@ describe("renderBoard のメンション", () => {
     const participants = Array.from({ length: 50 }, (_, i) => at(`u${i}`, night(21)));
     const board = renderBoard({ ...rec, max: null, notifyRoleId: "r1" }, participants, now);
     const count = (components: NonNullable<typeof board.components>): number =>
-      components.reduce((n, c) => n + 1 + ("components" in c ? count(c.components as typeof components) : 0), 0);
+      components.reduce(
+        (n, c) =>
+          n + 1 + ("components" in c ? count(c.components as typeof components) : 0) + ("accessory" in c ? 1 : 0),
+        0,
+      );
     const total = count(board.components ?? []);
-    expect(total).toBe(21);
+    expect(total).toBe(22);
     expect(total).toBeLessThanOrEqual(40);
+    const heading = board.components?.find((c) => c.type === ComponentType.Container)?.components[0];
+    if (heading?.type !== ComponentType.Section) throw new Error("section missing");
+    expect(heading.accessory.type).toBe(ComponentType.Button);
+    for (const row of rowsOf(rec, participants, now)) {
+      for (const component of row) {
+        if (component.type === ComponentType.StringSelect) expect(component.options.length).toBeGreaterThan(0);
+      }
+    }
   });
 });
 
