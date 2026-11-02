@@ -169,6 +169,7 @@ pnpm test
 
 - `pnpm run dev` でローカルに Worker を起動できる
 - PR と main への push では、GitHub Actions が整形・型検査・テスト・バンドルを確かめる
+- ワークフローが使うアクションは `.github/workflows/actions.lock` でコミットに固定している。`uses:` を変えたら `gh actions-lock` で作り直す（`gh extension install github/gh-actions-lock` で入る）
 - 依存の install script は、`pnpm-workspace.yaml` の `allowBuilds` で許可した esbuild と workerd のものだけが動く。install script を持つ依存が新しく増えると `pnpm install` が失敗するので、中身を確かめてから `allowBuilds` に足す
 - 公開から 1 日たっていない版は入らない（`minimumReleaseAge`）。公開時の信頼レベルが前の版より下がった版も入らない（`trustPolicy`）
 - `wrangler.jsonc` を変えたら、`pnpm run types` で `worker-configuration.d.ts` を作り直す
