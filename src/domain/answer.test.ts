@@ -120,20 +120,34 @@ describe("resolveAnswer", () => {
 
 describe("resolveUndo", () => {
   it("募集に含まれる時間帯だけを取り消す", () => {
-    expect(resolveUndo("night", night)).toEqual({ ok: true, op: { kind: "clear", bucket: "night" } });
-    expect(resolveUndo("noon", night).ok).toBe(false);
+    expect(resolveUndo("night", night, 20)).toEqual({ ok: true, op: { kind: "clear", bucket: "night" } });
+    expect(resolveUndo("noon", night, 20).ok).toBe(false);
   });
 
   it("いつでもOK はいつでもの募集でだけ取り消す", () => {
-    expect(resolveUndo("anytime", any)).toEqual({ ok: true, op: { kind: "clearAnytime" } });
-    expect(resolveUndo("anytime", night).ok).toBe(false);
+    expect(resolveUndo("anytime", any, 30)).toEqual({ ok: true, op: { kind: "clearAnytime" } });
+    expect(resolveUndo("anytime", night, 20).ok).toBe(false);
   });
 
   it("パスも全部取り消すで未回答に戻す", () => {
-    expect(resolveUndo("all", night)).toEqual({ ok: true, op: { kind: "clearAll" } });
+    expect(resolveUndo("all", night, 20)).toEqual({ ok: true, op: { kind: "clearAll", buckets: ["night"] } });
   });
 
   it("パスだけを取り消す操作にする", () => {
-    expect(resolveUndo("pass", night)).toEqual({ ok: true, op: { kind: "clearPass" } });
+    expect(resolveUndo("pass", night, 30)).toEqual({ ok: true, op: { kind: "clearPass" } });
+  });
+
+  it("時間帯の全時刻が過ぎたら取り消しを断る", () => {
+    expect(resolveUndo("morning", any, 12)).toEqual({ ok: false, message: "その時間帯はもう終わっています" });
+    expect(resolveUndo("night", night, 24)).toEqual({ ok: false, message: "その時間帯はもう終わっています" });
+    expect(resolveUndo("night", night, 23.5)).toEqual({ ok: true, op: { kind: "clear", bucket: "night" } });
+  });
+
+  it("全部取り消すでは未終了の時間帯だけを対象にする", () => {
+    expect(resolveUndo("all", any, 18)).toEqual({
+      ok: true,
+      op: { kind: "clearAll", buckets: ["night", "late"] },
+    });
+    expect(resolveUndo("all", any, 30)).toEqual({ ok: true, op: { kind: "clearAll", buckets: [] } });
   });
 });

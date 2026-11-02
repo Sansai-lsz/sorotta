@@ -8,7 +8,7 @@ export type AnswerOp =
   | { kind: "clear"; bucket: BucketKey }
   | { kind: "toggleAnytime" }
   | { kind: "clearAnytime" }
-  | { kind: "clearAll" }
+  | { kind: "clearAll"; buckets: readonly BucketKey[] }
   | { kind: "clearPass" }
   | { kind: "pass" };
 
@@ -67,9 +67,23 @@ export function resolveAnswer(action: AnswerAction, rec: { scope: Scope }, clock
   }
 }
 
-export function resolveUndo(target: UndoTarget, rec: { scope: Scope }): AnswerResult {
-  if (target === "all") return { ok: true, op: { kind: "clearAll" } };
+export function resolveUndo(target: UndoTarget, rec: { scope: Scope }, clock: number): AnswerResult {
+  if (target === "all") {
+    return {
+      ok: true,
+      op: {
+        kind: "clearAll",
+        buckets: bucketsOf(rec.scope)
+          .filter((bucket) => !bucket.hours.every((hour) => isHourOver(hour, clock)))
+          .map((bucket) => bucket.key),
+      },
+    };
+  }
   if (target === "pass") return { ok: true, op: { kind: "clearPass" } };
   if (target === "anytime") return rec.scope === "any" ? { ok: true, op: { kind: "clearAnytime" } } : INVALID;
-  return inScope(rec.scope, target) ? { ok: true, op: { kind: "clear", bucket: target } } : INVALID;
+  if (!inScope(rec.scope, target)) return INVALID;
+  if (bucketOf(target).hours.every((hour) => isHourOver(hour, clock))) {
+    return { ok: false, message: "その時間帯はもう終わっています" };
+  }
+  return { ok: true, op: { kind: "clear", bucket: target } };
 }

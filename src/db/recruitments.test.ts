@@ -109,12 +109,33 @@ describe("db", () => {
 
   it("パスとすべての回答を取り消して未回答に戻す", async () => {
     await applyAnswer(db, rec.id, "a", { kind: "pass" });
-    await applyAnswer(db, rec.id, "a", { kind: "clearAll" });
+    await applyAnswer(db, rec.id, "a", { kind: "clearAll", buckets: ["morning", "noon", "night", "late"] });
     expect((await listParticipants(db, rec.id))[1]).toEqual({ userId: "a", passed: false, anytime: false, slots: {} });
     await applyAnswer(db, rec.id, "a", { kind: "slot", bucket: "night", hour: 21, now: false });
     await applyAnswer(db, rec.id, "a", { kind: "toggleAnytime" });
-    await applyAnswer(db, rec.id, "a", { kind: "clearAll" });
+    await applyAnswer(db, rec.id, "a", { kind: "clearAll", buckets: ["morning", "noon", "night", "late"] });
     expect((await listParticipants(db, rec.id))[1]).toEqual({ userId: "a", passed: false, anytime: false, slots: {} });
+  });
+
+  it("全部取り消すでも終了済み時間帯の slots は残す", async () => {
+    await applyAnswer(db, rec.id, "a", { kind: "slot", bucket: "morning", hour: 9, now: false });
+    await applyAnswer(db, rec.id, "a", { kind: "slot", bucket: "night", hour: 21, now: false });
+    await applyAnswer(db, rec.id, "a", { kind: "toggleAnytime" });
+    await applyAnswer(db, rec.id, "a", { kind: "clearAll", buckets: ["night", "late"] });
+    expect((await listParticipants(db, rec.id))[1]).toEqual({
+      userId: "a",
+      passed: false,
+      anytime: false,
+      slots: { morning: { hour: 9, now: false } },
+    });
+    await applyAnswer(db, rec.id, "a", { kind: "slot", bucket: "noon", hour: 13, now: false });
+    await applyAnswer(db, rec.id, "a", { kind: "clearAll", buckets: [] });
+    expect((await listParticipants(db, rec.id))[1]).toEqual({
+      userId: "a",
+      passed: false,
+      anytime: false,
+      slots: { morning: { hour: 9, now: false }, noon: { hour: 13, now: false } },
+    });
   });
 
   it("古いパス取り消しから後の時刻といつでもOK の回答を守る", async () => {
@@ -142,7 +163,7 @@ describe("db", () => {
     { kind: "toggleAnytime" },
     { kind: "pass" },
     { kind: "clearAnytime" },
-    { kind: "clearAll" },
+    { kind: "clearAll", buckets: ["morning", "noon", "night", "late"] },
     { kind: "clearPass" },
   ] as const)("締め切った後の回答 $kind は書き込まない", async (op) => {
     await applyAnswer(db, rec.id, "a", { kind: "slot", bucket: "noon", hour: 13, now: false });

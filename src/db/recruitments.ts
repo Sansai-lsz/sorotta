@@ -141,9 +141,15 @@ function answerStatements(db: D1Database, recruitmentId: string, userId: string,
       return [
         ensure,
         updateParticipant("anytime = 0, passed = 0"),
-        db
-          .prepare(`DELETE FROM slots WHERE recruitment_id = ? AND user_id = ? AND ${WHILE_OPEN}`)
-          .bind(recruitmentId, userId, recruitmentId),
+        ...(op.buckets.length > 0
+          ? [
+              db
+                .prepare(
+                  `DELETE FROM slots WHERE recruitment_id = ? AND user_id = ? AND bucket IN (${op.buckets.map(() => "?").join(", ")}) AND ${WHILE_OPEN}`,
+                )
+                .bind(recruitmentId, userId, ...op.buckets, recruitmentId),
+            ]
+          : []),
       ];
     case "pass":
       return [

@@ -4,7 +4,7 @@ import {
   MessageFlags,
   type APIInteractionResponseCallbackData,
 } from "discord-api-types/v10";
-import { bucketOf, bucketsOf, hourLabel, shortHourLabel } from "../domain/buckets.ts";
+import { bucketOf, bucketsOf, hourLabel, isHourOver, shortHourLabel } from "../domain/buckets.ts";
 import type { UndoTarget } from "../domain/answer.ts";
 import { encodeCustomId } from "../discord/customId.ts";
 import type { Recruitment } from "../domain/recruitment.ts";
@@ -64,6 +64,7 @@ export function renderManagePanel(rec: Recruitment): APIInteractionResponseCallb
 export function renderUndoPanel(
   rec: Recruitment,
   participant: Participant | undefined,
+  clock: number,
 ): APIInteractionResponseCallbackData {
   const text = (content: string) => ({ type: ComponentType.TextDisplay as const, content });
   const section = (content: string, target: UndoTarget) => ({
@@ -82,7 +83,8 @@ export function renderUndoPanel(
           const slot = participant?.slots[bucket.key];
           if (!slot) return [];
           const label = rec.scope === "any" ? `${bucket.emoji} ${bucket.label}　` : "";
-          return [section(`${label}${hourLabel(slot.hour, rec.date)}${slot.now ? " ⚡今すぐ" : ""}`, bucket.key)];
+          const content = `${label}${hourLabel(slot.hour, rec.date)}${slot.now ? " ⚡今すぐ" : ""}`;
+          return [bucket.hours.every((hour) => isHourOver(hour, clock)) ? text(content) : section(content, bucket.key)];
         }),
         ...(participant?.anytime ? [section("🙆 いつでもOK", "anytime")] : []),
       ];
@@ -91,7 +93,7 @@ export function renderUndoPanel(
     components: [
       text("あなたの回答"),
       ...(answers.length === 0 ? [text("まだ回答していません")] : answers),
-      ...(answers.length >= 2
+      ...(answers.filter((answer) => answer.type === ComponentType.Section).length >= 2
         ? [
             {
               type: ComponentType.ActionRow as const,

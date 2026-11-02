@@ -152,7 +152,7 @@ async function openUndoPanel(
   return respond({
     type: InteractionResponseType.ChannelMessageWithSource,
     data: {
-      ...renderUndoPanel(rec, answerOf(participants, userId)),
+      ...renderUndoPanel(rec, answerOf(participants, userId), hoursSinceDateStart(rec.date, new Date())),
       flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
     },
   });
@@ -183,13 +183,9 @@ async function undoFromPanel(
     await editOriginal(env.DISCORD_APP_ID, interaction.token, textPanel(endedNotice(rec.status)));
     return;
   }
-  const result = resolveUndo(target, rec);
-  if (!result.ok) {
-    await followUp(env.DISCORD_APP_ID, interaction.token, ephemeralMessage(UNUSABLE));
-    return;
-  }
-  await applyAnswer(env.DB, rec.id, userId, result.op);
   const now = new Date();
+  const result = resolveUndo(target, rec, hoursSinceDateStart(rec.date, now));
+  if (result.ok) await applyAnswer(env.DB, rec.id, userId, result.op);
   const snapshot = await readSnapshot(env.DB, rec.id);
   if (!snapshot) return;
   const { rec: latest, participants } = snapshot;
@@ -197,9 +193,13 @@ async function undoFromPanel(
     env.DISCORD_APP_ID,
     interaction.token,
     latest.status === "open"
-      ? renderUndoPanel(latest, answerOf(participants, userId))
+      ? renderUndoPanel(latest, answerOf(participants, userId), hoursSinceDateStart(latest.date, now))
       : textPanel(endedNotice(latest.status)),
   );
+  if (!result.ok) {
+    await followUp(env.DISCORD_APP_ID, interaction.token, ephemeralMessage(result.message));
+    return;
+  }
   if (!(await publishBoard(env, rec.id, now))) {
     await followUp(env.DISCORD_APP_ID, interaction.token, ephemeralMessage("盤面を書き換えられませんでした"));
     return;

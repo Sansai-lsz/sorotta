@@ -25,12 +25,16 @@ describe("renderReadyNotice", () => {
 
 describe("renderUndoPanel", () => {
   it("時間帯といつでもOK を個別に表示し、複数なら全部取り消すを出す", () => {
-    const panel = renderUndoPanel(anyRec, {
-      userId: "a",
-      passed: false,
-      anytime: true,
-      slots: { night: { hour: 21, now: true }, late: { hour: 24, now: false } },
-    });
+    const panel = renderUndoPanel(
+      anyRec,
+      {
+        userId: "a",
+        passed: false,
+        anytime: true,
+        slots: { night: { hour: 21, now: true }, late: { hour: 24, now: false } },
+      },
+      20,
+    );
     expect(panel.flags).toBe(MessageFlags.IsComponentsV2);
     expect(panel.components).toEqual([
       { type: ComponentType.TextDisplay, content: "あなたの回答" },
@@ -58,8 +62,11 @@ describe("renderUndoPanel", () => {
 
   it("時間帯が 1 つの募集は時刻だけを表示する", () => {
     expect(
-      renderUndoPanel(base, { userId: "a", passed: false, anytime: false, slots: { night: { hour: 21, now: false } } })
-        .components?.[1],
+      renderUndoPanel(
+        base,
+        { userId: "a", passed: false, anytime: false, slots: { night: { hour: 21, now: false } } },
+        20,
+      ).components?.[1],
     ).toEqual({
       type: ComponentType.Section,
       components: [{ type: ComponentType.TextDisplay, content: "21時〜" }],
@@ -68,15 +75,55 @@ describe("renderUndoPanel", () => {
   });
 
   it("パスは単独で表示し、未回答なら説明文を足さない", () => {
-    expect(renderUndoPanel(base, { userId: "a", passed: true }).components?.[1]).toEqual({
+    expect(renderUndoPanel(base, { userId: "a", passed: true }, 30).components?.[1]).toEqual({
       type: ComponentType.Section,
       components: [{ type: ComponentType.TextDisplay, content: "今日はパス" }],
       accessory: expect.objectContaining({ custom_id: "u:123:pass" }),
     });
-    expect(renderUndoPanel(base, undefined).components).toEqual([
+    expect(renderUndoPanel(base, undefined, 20).components).toEqual([
       { type: ComponentType.TextDisplay, content: "あなたの回答" },
       { type: ComponentType.TextDisplay, content: "まだ回答していません" },
     ]);
+  });
+
+  it("過ぎた時間帯は文言だけを表示し、取り消し対象には数えない", () => {
+    const participant = {
+      userId: "a",
+      passed: false,
+      anytime: false,
+      slots: { morning: { hour: 9, now: false }, night: { hour: 18, now: false } },
+    };
+    expect(renderUndoPanel(anyRec, participant, 18).components).toEqual([
+      { type: ComponentType.TextDisplay, content: "あなたの回答" },
+      { type: ComponentType.TextDisplay, content: "🌅 朝　9時〜" },
+      {
+        type: ComponentType.Section,
+        components: [{ type: ComponentType.TextDisplay, content: "🌙 夜　18時〜" }],
+        accessory: expect.objectContaining({ custom_id: "u:123:night" }),
+      },
+    ]);
+    expect(renderUndoPanel(anyRec, participant, 24).components).toEqual([
+      { type: ComponentType.TextDisplay, content: "あなたの回答" },
+      { type: ComponentType.TextDisplay, content: "🌅 朝　9時〜" },
+      { type: ComponentType.TextDisplay, content: "🌙 夜　18時〜" },
+    ]);
+  });
+
+  it("未終了の回答が 2 行なら全部取り消すを出す", () => {
+    const panel = renderUndoPanel(
+      anyRec,
+      {
+        userId: "a",
+        passed: false,
+        anytime: true,
+        slots: { morning: { hour: 9, now: false }, night: { hour: 18, now: false } },
+      },
+      18,
+    );
+    expect(panel.components?.at(-1)).toEqual({
+      type: ComponentType.ActionRow,
+      components: [expect.objectContaining({ custom_id: "u:123:all" })],
+    });
   });
 });
 
