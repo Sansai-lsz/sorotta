@@ -235,7 +235,7 @@ describe("renderBoard（終わった募集）", () => {
   });
 });
 
-describe("renderBoard のメンション", () => {
+describe("renderBoard（盤面の構成）", () => {
   const evening = jst("2026-11-01T17:00:00");
 
   it("受付中は操作前まで 3 本、締め切り後は 2 本の区切り線で表示を分ける", () => {
@@ -307,6 +307,10 @@ describe("renderBoard のメンション", () => {
   it("パスだけなら案内を出さず、一覧にパスを出す", () => {
     expect(textDisplaysOf(base, [{ userId: "d", passed: true }], evening)[2]).toBe("パス: <@d>");
   });
+});
+
+describe("renderBoard のメンション", () => {
+  const evening = jst("2026-11-01T17:00:00");
 
   it("一覧のメンションでは誰にも通知しない", () => {
     expect(renderBoard(base, [], evening).allowed_mentions).toEqual({ parse: [] });

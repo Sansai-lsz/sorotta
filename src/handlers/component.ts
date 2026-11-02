@@ -3,6 +3,7 @@ import {
   InteractionResponseType,
   MessageFlags,
   type APIMessageComponentInteraction,
+  type APITextDisplayComponent,
 } from "discord-api-types/v10";
 import { resolveAnswer, resolveUndo, type AnswerAction, type AnswerResult, type UndoTarget } from "../domain/answer.ts";
 import { hoursSinceDateStart } from "../domain/date.ts";
@@ -16,7 +17,7 @@ import {
 } from "../db/recruitments.ts";
 import { createChannelMessage, editOriginal, ephemeralMessage, followUp, reply, respond } from "../discord/api.ts";
 import { parseCustomId, parseSelectValue, type ComponentAction } from "../discord/customId.ts";
-import { cancelNoticeTargets } from "../domain/tally.ts";
+import { cancelNoticeTargets, type Participant } from "../domain/tally.ts";
 import { boardEditPayload } from "../render/board.ts";
 import {
   endedNotice,
@@ -151,13 +152,19 @@ async function openUndoPanel(
   return respond({
     type: InteractionResponseType.ChannelMessageWithSource,
     data: {
-      ...renderUndoPanel(
-        rec,
-        participants.find((p) => p.userId === userId),
-      ),
+      ...renderUndoPanel(rec, answerOf(participants, userId)),
       flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
     },
   });
+}
+
+function answerOf(participants: Participant[], userId: string): Participant | undefined {
+  return participants.find((p) => p.userId === userId);
+}
+
+// 取り消しパネルは Components V2 なので、文言だけに差し替えるときも TextDisplay で送る
+function textPanel(content: string): { components: [APITextDisplayComponent] } {
+  return { components: [{ type: ComponentType.TextDisplay, content }] };
 }
 
 async function undoFromPanel(
@@ -169,15 +176,11 @@ async function undoFromPanel(
 ): Promise<void> {
   const rec = await getRecruitment(env.DB, recruitmentId);
   if (!rec) {
-    await editOriginal(env.DISCORD_APP_ID, interaction.token, {
-      components: [{ type: ComponentType.TextDisplay, content: UNUSABLE }],
-    });
+    await editOriginal(env.DISCORD_APP_ID, interaction.token, textPanel(UNUSABLE));
     return;
   }
   if (rec.status !== "open") {
-    await editOriginal(env.DISCORD_APP_ID, interaction.token, {
-      components: [{ type: ComponentType.TextDisplay, content: endedNotice(rec.status) }],
-    });
+    await editOriginal(env.DISCORD_APP_ID, interaction.token, textPanel(endedNotice(rec.status)));
     return;
   }
   const result = resolveUndo(target, rec);
@@ -189,22 +192,19 @@ async function undoFromPanel(
   const now = new Date();
   const snapshot = await readSnapshot(env.DB, rec.id);
   if (!snapshot) return;
+  const { rec: latest, participants } = snapshot;
   await editOriginal(
     env.DISCORD_APP_ID,
     interaction.token,
-    snapshot.rec.status === "open"
-      ? renderUndoPanel(
-          snapshot.rec,
-          snapshot.participants.find((p) => p.userId === userId),
-        )
-      : { components: [{ type: ComponentType.TextDisplay, content: endedNotice(snapshot.rec.status) }] },
+    latest.status === "open"
+      ? renderUndoPanel(latest, answerOf(participants, userId))
+      : textPanel(endedNotice(latest.status)),
   );
   if (!(await publishBoard(env, rec.id, now))) {
     await followUp(env.DISCORD_APP_ID, interaction.token, ephemeralMessage("盤面を書き換えられませんでした"));
     return;
   }
-  if (snapshot.rec.status === "open")
-    await notifyIfReady(env, interaction.token, snapshot.rec, snapshot.participants, now);
+  if (latest.status === "open") await notifyIfReady(env, interaction.token, latest, participants, now);
 }
 
 function toAnswerAction(

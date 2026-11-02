@@ -33,6 +33,7 @@ import {
   type Outcome,
   type Participant,
   type Slot,
+  type Tally,
 } from "../domain/tally.ts";
 
 import { button, mention, mentions } from "./shared.ts";
@@ -58,14 +59,83 @@ function chunk<T>(items: T[], size: number): T[][] {
   return out;
 }
 
+const SEPARATOR: APISeparatorComponent = {
+  type: ComponentType.Separator,
+  divider: true,
+  spacing: SeparatorSpacingSize.Small,
+};
+
 export function renderBoard(
   rec: Recruitment,
   participants: Participant[],
   now: Date,
 ): APIInteractionResponseCallbackData {
-  const ended = rec.status !== "open";
   const clock = recruitmentClock(rec, now);
   const t = tallyRecruitment(rec, participants, now);
+  const controls = controlsOf(rec, clock);
+  // 書き換えのたびに同じ行を描き直せるよう、ロールの行は募集に保存したロールから毎回作る
+  const roleLine: APITextDisplayComponent[] =
+    rec.notifyRoleId === null ? [] : [textDisplay(`<@&${rec.notifyRoleId}> ${rec.game} の募集が出ました`)];
+
+  // 一覧のメンションは名前表示のためだけに使う。押すたびに全員へ通知が飛ばないよう抑止する
+  return {
+    flags: MessageFlags.IsComponentsV2,
+    allowed_mentions: { parse: [] },
+    components: [
+      ...roleLine,
+      {
+        type: ComponentType.Container,
+        accent_color: accentColor(rec.status !== "open", t.outcome),
+        components: [
+          headingBlock(rec, controls.length > 0),
+          SEPARATOR,
+          textDisplay(resultLines(rec, t.outcome).join("\n")),
+          SEPARATOR,
+          textDisplay(answerLines(rec, participants, t, clock).join("\n")),
+          ...(controls.length > 0 ? [SEPARATOR, ...controls] : []),
+        ],
+      },
+    ],
+  };
+}
+
+function textDisplay(content: string): APITextDisplayComponent {
+  return { type: ComponentType.TextDisplay, content };
+}
+
+function controlsOf(rec: Recruitment, clock: number | null): ActionRow[] {
+  if (clock === null) return [];
+  if (rec.scope === "any") return anyControls(rec, clock);
+  return singleControls(rec, bucketOf(rec.scope), clock);
+}
+
+function statusBadge(status: Recruitment["status"]): string {
+  switch (status) {
+    case "open":
+      return "";
+    case "closed":
+      return " ［締め切り］";
+    case "cancelled":
+      return " ［中止］";
+  }
+}
+
+function headingBlock(rec: Recruitment, withGear: boolean): APISectionComponent | APITextDisplayComponent {
+  const when = rec.scope === "any" ? "いつでも" : `${bucketOf(rec.scope).emoji}${bucketOf(rec.scope).label}`;
+  const heading = textDisplay(
+    `### 🎮 ${rec.game} やる人？ ${formatDate(rec.date)} ${when}${statusBadge(rec.status)}\n募集: ${mention(rec.hostId)}（${playersLabel(rec.min, rec.max)}）`,
+  );
+  return withGear ? { type: ComponentType.Section, components: [heading], accessory: gearButton(rec) } : heading;
+}
+
+function resultLines(rec: Recruitment, outcome: Outcome): string[] {
+  const lines = outcomeLines(rec, outcome);
+  if (rec.status === "closed") lines.push("", "この募集は締め切られました");
+  if (rec.status === "cancelled") lines.push("", "この募集は中止されました");
+  return lines;
+}
+
+function answerLines(rec: Recruitment, participants: Participant[], t: Tally, clock: number | null): string[] {
   const reserves = new Set(t.outcome.kind === "ready" ? t.outcome.ready.reserves : []);
   const over = (hour: number) => clock !== null && isHourOver(hour, clock);
   const answered = activeParticipants(participants);
@@ -76,7 +146,7 @@ export function renderBoard(
   const row = (label: string, struck: boolean, people: string[], separator: string) =>
     `${struck ? `~~${label}~~` : `**${label}**`}　${people.join(separator)}`;
 
-  const rows =
+  const lines =
     scope === "any"
       ? BUCKETS.flatMap((b) => {
           const here = answered
@@ -96,57 +166,11 @@ export function renderBoard(
           return people.length > 0 ? [row(hourLabel(hour, rec.date), over(hour), people, " ")] : [];
         });
   if (scope === "any" && t.anytime.length > 0) {
-    rows.push(`**🙆 いつでも**　${t.anytime.map((userId) => chip(userId, undefined)).join(" ")}`);
+    lines.push(`**🙆 いつでも**　${t.anytime.map((userId) => chip(userId, undefined)).join(" ")}`);
   }
-
-  const resultLines = outcomeLines(rec, t.outcome);
-  if (t.passed.length > 0) rows.push(`パス: ${mentions(t.passed)}`);
-  if (rows.length === 0) rows.push("まだ誰も回答していません");
-  if (ended)
-    resultLines.push("", rec.status === "cancelled" ? "この募集は中止されました" : "この募集は締め切られました");
-
-  const when = scope === "any" ? "いつでも" : `${bucketOf(scope).emoji}${bucketOf(scope).label}`;
-  const badge = rec.status === "closed" ? " ［締め切り］" : rec.status === "cancelled" ? " ［中止］" : "";
-  const controls =
-    clock === null ? [] : scope === "any" ? anyControls(rec, clock) : singleControls(rec, bucketOf(scope), clock);
-  const heading: APITextDisplayComponent = {
-    type: ComponentType.TextDisplay,
-    content: `### 🎮 ${rec.game} やる人？ ${formatDate(rec.date)} ${when}${badge}\n募集: ${mention(rec.hostId)}（${playersLabel(rec.min, rec.max)}）`,
-  };
-  const headingBlock: APISectionComponent | APITextDisplayComponent =
-    controls.length > 0 ? { type: ComponentType.Section, components: [heading], accessory: gearButton(rec) } : heading;
-  const separator: APISeparatorComponent = {
-    type: ComponentType.Separator,
-    divider: true,
-    spacing: SeparatorSpacingSize.Small,
-  };
-  // 書き換えのたびに同じ行を描き直せるよう、ロールの行は募集に保存したロールから毎回作る
-  const roleLine: APITextDisplayComponent[] =
-    rec.notifyRoleId === null
-      ? []
-      : [{ type: ComponentType.TextDisplay, content: `<@&${rec.notifyRoleId}> ${rec.game} の募集が出ました` }];
-
-  // 一覧のメンションは名前表示のためだけに使う。押すたびに全員へ通知が飛ばないよう抑止する
-  return {
-    flags: MessageFlags.IsComponentsV2,
-    allowed_mentions: { parse: [] },
-    components: [
-      ...roleLine,
-      {
-        type: ComponentType.Container,
-        accent_color: accentColor(ended, t.outcome),
-        components: [
-          headingBlock,
-          separator,
-          { type: ComponentType.TextDisplay, content: resultLines.join("\n") },
-          separator,
-          { type: ComponentType.TextDisplay, content: rows.join("\n") },
-          ...(controls.length > 0 ? [separator] : []),
-          ...controls,
-        ],
-      },
-    ],
-  };
+  if (t.passed.length > 0) lines.push(`パス: ${mentions(t.passed)}`);
+  if (lines.length === 0) lines.push("まだ誰も回答していません");
+  return lines;
 }
 
 // 参加者のメンションは名前表示のためだけなので許さず、募集に保存したロールだけを許す
