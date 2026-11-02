@@ -8,17 +8,17 @@
       "binding": "DB",
       "database_name": "game-bot",
       "database_id": "404f7ef2-a5c5-4283-8433-bb661dde7723",
-      "migrations_dir": "migrations"
-    }
+      "migrations_dir": "migrations",
+    },
   ],
   "vars": {
     "DISCORD_APP_ID": "1566303305217347646",
-    "DISCORD_PUBLIC_KEY": "02784cfa7d15aa85a93da3dc45976dc8ea1df310c997f00cdf48098e21a9dcba"
+    "DISCORD_PUBLIC_KEY": "02784cfa7d15aa85a93da3dc45976dc8ea1df310c997f00cdf48098e21a9dcba",
   },
   "triggers": {
-    "crons": ["0 * * * *"]
+    "crons": ["0 * * * *"],
   },
   "secrets": {
-    "required": ["DISCORD_BOT_TOKEN"]
-  }
+    "required": ["DISCORD_BOT_TOKEN"],
+  },
 }

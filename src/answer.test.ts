@@ -25,7 +25,10 @@ describe("resolveAnswer", () => {
     });
 
     it("募集の時間帯にない時刻は使えない", () => {
-      expect(resolveAnswer({ kind: "hour", hour: 12 }, night, 9)).toEqual({ ok: false, message: "このボタンは使えません" });
+      expect(resolveAnswer({ kind: "hour", hour: 12 }, night, 9)).toEqual({
+        ok: false,
+        message: "このボタンは使えません",
+      });
     });
 
     it("いつでもの募集では使えない", () => {
@@ -76,7 +79,9 @@ describe("resolveAnswer", () => {
     });
 
     it("別の時間帯の時刻は使えない", () => {
-      expect(resolveAnswer({ kind: "select", bucket: "noon", value: { kind: "hour", hour: 21 } }, any, 9).ok).toBe(false);
+      expect(resolveAnswer({ kind: "select", bucket: "noon", value: { kind: "hour", hour: 21 } }, any, 9).ok).toBe(
+        false,
+      );
     });
 
     it("今すぐを選ぶと今の時刻に ⚡ の印を付ける", () => {

@@ -31,12 +31,21 @@ describe("custom_id", () => {
     expect(encodeCustomId({ kind: "cancel", recruitmentId: "123" })).toBe("x:123");
   });
 
-  it.each(["", "h", "h:123", "h:123:abc", "n:123:evening", "s:123", "p:123:1", "q:123", "p:abc", "a:123:night:1", "h::21"])(
-    "壊れた入力 %j は null",
-    (input) => {
-      expect(parseCustomId(input)).toBeNull();
-    },
-  );
+  it.each([
+    "",
+    "h",
+    "h:123",
+    "h:123:abc",
+    "n:123:evening",
+    "s:123",
+    "p:123:1",
+    "q:123",
+    "p:abc",
+    "a:123:night:1",
+    "h::21",
+  ])("壊れた入力 %j は null", (input) => {
+    expect(parseCustomId(input)).toBeNull();
+  });
 });
 
 describe("セレクトの値", () => {

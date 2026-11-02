@@ -77,8 +77,11 @@ Cloudflare Workers と D1 で動き、無料枠の範囲で常時稼働する。
 
 ### 1. 依存を入れる
 
+パッケージマネージャには pnpm を使う。入っていなければ npm で入れる。このリポジトリの中では `package.json` の `packageManager` の版に切り替わる。
+
 ```powershell
-npm install
+npm install -g pnpm@latest
+pnpm install
 ```
 
 ### 2. Discord のアプリを作る
@@ -93,8 +96,8 @@ npm install
 ### 3. 設定を書き換える
 
 ```powershell
-npx wrangler login
-npx wrangler d1 create game-bot
+pnpm exec wrangler login
+pnpm exec wrangler d1 create game-bot
 ```
 
 `wrangler.jsonc` の次の値を、自分のものに書き換える。
@@ -123,48 +126,52 @@ notepad .dev.vars
 先にデータベースを作る。
 
 ```powershell
-npm run migrate
+pnpm run migrate
 ```
 
 `wrangler.jsonc` で bot token を必須の secret にしているので、初回のデプロイでは token を一緒に渡す。まだない Worker には `wrangler secret put` で secret を登録できないため、token だけを書いた一時ファイルを使う。
 
 ```powershell
 Select-String -Path .dev.vars -Pattern '^DISCORD_BOT_TOKEN=' | ForEach-Object { $_.Line } | Set-Content -Path secrets.tmp
-npx wrangler deploy --secrets-file secrets.tmp
+pnpm exec wrangler deploy --secrets-file secrets.tmp
 Remove-Item secrets.tmp
 ```
 
-2 回目からは `npm run deploy` だけでよい。token を変えたときは `npx wrangler secret put DISCORD_BOT_TOKEN` で登録し直す。
+2 回目からは `pnpm run deploy` だけでよい。token を変えたときは `pnpm exec wrangler secret put DISCORD_BOT_TOKEN` で登録し直す。
 
 デプロイすると `https://sorotta.<サブドメイン>.workers.dev` が表示される。この URL を Developer Portal の General Information → Interactions Endpoint URL に貼って保存する。保存するときに Discord が署名を検証するので、保存できればつながっている。
 
 ### 5. コマンドを登録する
 
 ```powershell
-npm run register
+pnpm run register
 ```
 
 コマンドは `.dev.vars` の `DISCORD_GUILD_ID` のサーバーにだけ登録する（ギルドコマンド）。コマンドやオプションを変えたときは、もう一度実行する。
 
 ### 更新するとき
 
-`migrations/` に新しいファイルが増えたときは、デプロイより先に `npm run migrate` を実行する。新しいコードがまだない列を読んで失敗するのを防ぐため。
+`migrations/` に新しいファイルが増えたときは、デプロイより先に `pnpm run migrate` を実行する。新しいコードがまだない列を読んで失敗するのを防ぐため。
 
 ```powershell
-npm run migrate
-npm run deploy
-npm run register
+pnpm run migrate
+pnpm run deploy
+pnpm run register
 ```
 
 ## 開発
 
 ```powershell
-npm run typecheck
-npm test
+pnpm run fmt
+pnpm run typecheck
+pnpm test
 ```
 
-- `npm run dev` には workerd が必要。npm の設定で install script が止められているときは、先に `npm install-scripts approve workerd` と `npm rebuild workerd` を実行する
-- `wrangler.jsonc` を変えたら、`npm run types` で `worker-configuration.d.ts` を作り直す
+- `pnpm run dev` でローカルに Worker を起動できる
+- PR と main への push では、GitHub Actions が整形・型検査・テスト・バンドルを確かめる
+- 依存の install script は、`pnpm-workspace.yaml` の `allowBuilds` で許可した esbuild と workerd のものだけが動く。install script を持つ依存が新しく増えると `pnpm install` が失敗するので、中身を確かめてから `allowBuilds` に足す
+- 公開から 1 日たっていない版は入らない（`minimumReleaseAge`）。公開時の信頼レベルが前の版より下がった版も入らない（`trustPolicy`）
+- `wrangler.jsonc` を変えたら、`pnpm run types` で `worker-configuration.d.ts` を作り直す
 - 画面の動きを確かめるためのモックが `docs/mock.html` にある
 
 ## ライセンス
