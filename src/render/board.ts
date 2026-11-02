@@ -4,10 +4,12 @@ import {
   type APIComponentInMessageActionRow,
   type APIInteractionResponseCallbackData,
   type APISelectMenuOption,
+  type APISeparatorComponent,
   type APITextDisplayComponent,
   ButtonStyle,
   type APIButtonComponent,
   MessageFlags,
+  SeparatorSpacingSize,
   type RESTPatchAPIChannelMessageJSONBody,
 } from "discord-api-types/v10";
 import {
@@ -96,15 +98,20 @@ export function renderBoard(
     rows.push(`**🙆 いつでも**　${t.anytime.map((userId) => chip(userId, undefined)).join(" ")}`);
   }
 
-  const lines = [`募集: ${mention(rec.hostId)}（${playersLabel(rec.min, rec.max)}）`, "", ...rows, ""];
-  lines.push(...outcomeLines(rec, t.outcome));
-  if (t.passed.length > 0) lines.push(`パス: ${mentions(t.passed)}`);
-  if (ended) lines.push("", rec.status === "cancelled" ? "この募集は中止されました" : "この募集は締め切られました");
+  const resultLines = outcomeLines(rec, t.outcome);
+  if (t.passed.length > 0) resultLines.push(`パス: ${mentions(t.passed)}`);
+  if (ended)
+    resultLines.push("", rec.status === "cancelled" ? "この募集は中止されました" : "この募集は締め切られました");
 
   const when = scope === "any" ? "いつでも" : `${bucketOf(scope).emoji}${bucketOf(scope).label}`;
   const badge = rec.status === "closed" ? " ［締め切り］" : rec.status === "cancelled" ? " ［中止］" : "";
   const controls =
     clock === null ? [] : scope === "any" ? anyControls(rec, clock) : singleControls(rec, bucketOf(scope), clock);
+  const separator: APISeparatorComponent = {
+    type: ComponentType.Separator,
+    divider: true,
+    spacing: SeparatorSpacingSize.Small,
+  };
   // 書き換えのたびに同じ行を描き直せるよう、ロールの行は募集に保存したロールから毎回作る
   const roleLine: APITextDisplayComponent[] =
     rec.notifyRoleId === null
@@ -123,9 +130,13 @@ export function renderBoard(
         components: [
           {
             type: ComponentType.TextDisplay,
-            content: `### 🎮 ${rec.game} やる人？ ${formatDate(rec.date)} ${when}${badge}`,
+            content: `### 🎮 ${rec.game} やる人？ ${formatDate(rec.date)} ${when}${badge}\n募集: ${mention(rec.hostId)}（${playersLabel(rec.min, rec.max)}）`,
           },
-          { type: ComponentType.TextDisplay, content: lines.join("\n") },
+          separator,
+          { type: ComponentType.TextDisplay, content: rows.join("\n") },
+          separator,
+          { type: ComponentType.TextDisplay, content: resultLines.join("\n") },
+          ...(controls.length > 0 ? [separator] : []),
           ...controls,
         ],
       },

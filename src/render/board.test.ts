@@ -1,4 +1,4 @@
-import { ComponentType, MessageFlags } from "discord-api-types/v10";
+import { ComponentType, MessageFlags, SeparatorSpacingSize } from "discord-api-types/v10";
 import { describe, expect, it } from "vitest";
 import type { Recruitment } from "../domain/recruitment.ts";
 import type { Participant } from "../domain/tally.ts";
@@ -6,7 +6,7 @@ import { boardEditPayload, boardInitialPayload, gameLabel, renderBoard } from ".
 import { at, anyRec, base, jst, lateRec, night } from "./testData.ts";
 
 function descriptionOf(rec: Recruitment, participants: Participant[], now: Date): string {
-  return textDisplaysOf(rec, participants, now)[1] ?? "";
+  return textDisplaysOf(rec, participants, now).join("\n");
 }
 
 function containerOf(rec: Recruitment, participants: Participant[], now: Date) {
@@ -22,7 +22,7 @@ function textDisplaysOf(rec: Recruitment, participants: Participant[], now: Date
 }
 
 function titleOf(rec: Recruitment, participants: Participant[], now: Date): string {
-  return textDisplaysOf(rec, participants, now)[0] ?? "";
+  return textDisplaysOf(rec, participants, now)[0]?.split("\n")[0] ?? "";
 }
 
 function rowsOf(rec: Recruitment, participants: Participant[], now: Date) {
@@ -196,7 +196,7 @@ describe("renderBoard（終わった募集）", () => {
     expect(description).toContain("**18時〜**　<@a>");
     expect(description).toMatch(/この募集は締め切られました$/);
     expect(containerOf(closed, participants, after).accent_color).toBe(0x99aab5);
-    expect(containerOf(closed, participants, after).components).toHaveLength(2);
+    expect(containerOf(closed, participants, after).components).toHaveLength(5);
   });
 
   it("そろう前に終わったらそろわなかったと出す", () => {
@@ -221,12 +221,55 @@ describe("renderBoard（終わった募集）", () => {
     expect(titleOf(cancelled, participants, after)).toBe("### 🎮 Apex やる人？ 11/1(日) 🌙夜 ［中止］");
     expect(description).toContain("そろいませんでした");
     expect(description).toMatch(/この募集は中止されました$/);
-    expect(containerOf(cancelled, participants, after).components).toHaveLength(2);
+    expect(containerOf(cancelled, participants, after).components).toHaveLength(5);
   });
 });
 
 describe("renderBoard のメンション", () => {
   const evening = jst("2026-11-01T17:00:00");
+
+  it("受付中は操作前まで 3 本、締め切り後は 2 本の区切り線で表示を分ける", () => {
+    const openComponents = containerOf(base, [], evening).components;
+    const closedComponents = containerOf({ ...base, status: "closed" }, [], evening).components;
+    const separator = {
+      type: ComponentType.Separator,
+      divider: true,
+      spacing: SeparatorSpacingSize.Small,
+    };
+
+    expect(openComponents.map((component) => component.type)).toEqual([
+      ComponentType.TextDisplay,
+      ComponentType.Separator,
+      ComponentType.TextDisplay,
+      ComponentType.Separator,
+      ComponentType.TextDisplay,
+      ComponentType.Separator,
+      ComponentType.ActionRow,
+      ComponentType.ActionRow,
+      ComponentType.ActionRow,
+    ]);
+    expect(closedComponents.map((component) => component.type)).toEqual([
+      ComponentType.TextDisplay,
+      ComponentType.Separator,
+      ComponentType.TextDisplay,
+      ComponentType.Separator,
+      ComponentType.TextDisplay,
+    ]);
+    expect(openComponents.filter((component) => component.type === ComponentType.Separator)).toEqual([
+      separator,
+      separator,
+      separator,
+    ]);
+    expect(closedComponents.filter((component) => component.type === ComponentType.Separator)).toEqual([
+      separator,
+      separator,
+    ]);
+    const [heading, answers, result] = textDisplaysOf(base, [], evening);
+    expect(heading).toBe("### 🎮 Apex やる人？ 11/1(日) 🌙夜\n募集: <@host>（3人〜・定員3人）");
+    expect(answers).toMatch(/^\*\*18時〜\*\*　－/);
+    expect(answers).toMatch(/\*\*23時〜\*\*　－$/);
+    expect(result).toBe("あと 3人");
+  });
 
   it("一覧のメンションでは誰にも通知しない", () => {
     expect(renderBoard(base, [], evening).allowed_mentions).toEqual({ parse: [] });
@@ -283,7 +326,7 @@ describe("renderBoard のメンション", () => {
     const count = (components: NonNullable<typeof board.components>): number =>
       components.reduce((n, c) => n + 1 + ("components" in c ? count(c.components as typeof components) : 0), 0);
     const total = count(board.components ?? []);
-    expect(total).toBe(16);
+    expect(total).toBe(20);
     expect(total).toBeLessThanOrEqual(40);
   });
 });
